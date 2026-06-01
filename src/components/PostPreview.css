@@ -1,0 +1,193 @@
+.post-preview {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.preview-header h2 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.platform-badge {
+  text-transform: capitalize;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.75rem;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+  color: var(--text-muted);
+}
+
+.preview-facebook .platform-badge { background: rgba(24, 119, 242, 0.2); color: #1877F2; }
+.preview-instagram .platform-badge { background: rgba(228, 64, 95, 0.2); color: #E4405F; }
+.preview-linkedin .platform-badge { background: rgba(10, 102, 194, 0.2); color: #0A66C2; }
+.preview-google .platform-badge { background: rgba(234, 67, 53, 0.2); color: #EA4335; }
+
+.preview-card {
+  flex: 1;
+  background: #ffffff;
+  color: #1c1e21;
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.preview-user {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.preview-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #e4e6eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #65676b;
+}
+
+.preview-user-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-name {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: #1c1e21;
+}
+
+.preview-time {
+  font-size: 0.8125rem;
+  color: #65676b;
+}
+
+.preview-content {
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  margin-bottom: 1rem;
+  white-space: pre-wrap;
+  color: #1c1e21;
+}
+
+.preview-placeholder {
+  color: #65676b;
+  opacity: 0.5;
+  font-style: italic;
+}
+
+.preview-actions {
+  display: flex;
+  border-top: 1px solid #e4e6eb;
+  padding-top: 0.5rem;
+  margin-top: 1rem;
+  justify-content: space-around;
+  color: #65676b;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.mock-action {
+  padding: 0.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  text-align: center;
+  transition: background 0.2s ease;
+}
+
+.mock-action:hover {
+  background: #f0f2f5;
+  border-radius: var(--radius-sm);
+}
+
+/* Platform specific tweaks inside card */
+.preview-linkedin .preview-card {
+  border-radius: 2px;
+  border: 1px solid #e0dfdc;
+  box-shadow: none;
+}
+
+.preview-instagram .preview-card {
+  border: 1px solid #dbdbdb;
+  box-shadow: none;
+  padding: 0; /* Instagram post card has no padding, image goes edge-to-edge! */
+}
+
+.preview-instagram .preview-user,
+.preview-instagram .preview-content,
+.preview-instagram .preview-actions {
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+.preview-instagram .preview-user {
+  padding-top: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.preview-instagram .preview-content {
+  padding-bottom: 0.75rem;
+  margin-bottom: 0;
+}
+
+.preview-instagram .preview-actions {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  margin-top: 0;
+  border-top: 1px solid #efefef;
+}
+
+/* CONTENEUR DE L'IMAGE DE COUVERTURE DANS LA PRÉVISUALISATION */
+.preview-cover-image-container {
+  width: 100%;
+  max-height: 280px;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+  border: 1px solid #efefef;
+  background: #f8f9fa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-cover-image {
+  width: 100%;
+  height: 100%;
+  max-height: 280px;
+  object-fit: cover;
+}
+
+/* Style d'affichage Instagram (Hero - Pleine Largeur) */
+.instagram-hero {
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  margin-bottom: 0.75rem;
+  max-height: 380px;
+  height: 300px;
+}
+
+.instagram-hero .preview-cover-image {
+  max-height: 380px;
+  height: 100%;
+}

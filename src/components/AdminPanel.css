@@ -1,0 +1,295 @@
+.admin-panel-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  width: 100%;
+  max-width: 1300px;
+  margin: 0 auto;
+  padding: 1rem 0;
+}
+
+.admin-header {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1.5rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--surface-border);
+}
+
+.admin-header-icon {
+  color: var(--primary-color);
+  background: rgba(25, 140, 204, 0.1);
+  padding: 0.5rem;
+  border-radius: var(--radius-md);
+  box-sizing: content-box;
+}
+
+.admin-header h2 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.admin-header p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+/* ADMIN LAYOUT Split 4.5/7.5 */
+.admin-layout {
+  display: grid;
+  grid-template-columns: 1.1fr 1.9fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+@media (max-width: 968px) {
+  .admin-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* TAB NAVIGATION IN FORM COLUMN */
+.admin-tab-nav {
+  display: flex;
+  border-bottom: 1px solid var(--surface-border);
+  margin-bottom: 1.5rem;
+}
+
+.admin-tab-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.85rem 0.5rem;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-bottom: 2px solid transparent;
+}
+
+.admin-tab-btn:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.admin-tab-btn.active {
+  color: var(--primary-color);
+  border-bottom-color: var(--primary-color);
+  background: rgba(25, 140, 204, 0.05);
+}
+
+.admin-tab-body {
+  padding: 0.5rem 1.5rem 1.5rem 1.5rem;
+}
+
+/* FORMS STYLE */
+.admin-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.admin-form h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.admin-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.admin-form label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.admin-form input,
+.admin-form select {
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--surface-border);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-main);
+  font-size: 0.9rem;
+  font-family: inherit;
+  transition: border-color 0.2s ease;
+}
+
+.admin-form input:focus,
+.admin-form select:focus {
+  border-color: var(--primary-color);
+  outline: none;
+}
+
+.admin-form .form-hint {
+  font-size: 0.725rem;
+  color: var(--text-muted);
+}
+
+/* CONTRACT INPUTS GRID */
+.contract-grid-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-top: 0.5rem;
+}
+
+.contract-inputs-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+
+.contract-inputs-grid input {
+  padding: 0.5rem;
+  text-align: center;
+}
+
+/* BUTTONS */
+.btn-primary-admin {
+  margin-top: 1rem;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 0.75rem;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+.btn-primary-admin:hover:not(:disabled) {
+  background: #1579b3;
+  transform: translateY(-1px);
+}
+
+.btn-primary-admin:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* LIST COLUMN */
+.admin-list-column {
+  padding: 1.5rem;
+}
+
+.admin-list-column h3 {
+  margin: 0 0 1.25rem 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.admin-companies-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+}
+
+.admin-companies-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.875rem;
+}
+
+.admin-companies-table th,
+.admin-companies-table td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--surface-border);
+}
+
+.admin-companies-table th {
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.admin-companies-table tr:last-child td {
+  border-bottom: none;
+}
+
+.company-logo-cell {
+  width: 60px;
+}
+
+.admin-logo-wrapper {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid var(--surface-border);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.admin-logo-wrapper img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.admin-logo-fallback {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 1.1rem;
+  border: 1px solid var(--surface-border);
+}
+
+.company-name-cell {
+  font-size: 0.95rem;
+  color: var(--text-main);
+}
+
+/* BADGES CONTRACT */
+.contract-badge-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.c-badge {
+  font-size: 0.725rem;
+  font-weight: 700;
+  padding: 0.2rem 0.45rem;
+  border-radius: 4px;
+}
+
+.badge-ln { background: rgba(10, 102, 194, 0.15); color: #0a66c2; }
+.badge-fb { background: rgba(24, 119, 242, 0.15); color: #1877f2; }
+.badge-ig { background: rgba(228, 64, 95, 0.15); color: #e4405f; }
+.badge-g { background: rgba(234, 67, 53, 0.15); color: #ea4335; }
+.badge-blog { background: rgba(99, 102, 241, 0.15); color: #6366f1; }
+.badge-mail { background: rgba(16, 185, 129, 0.15); color: #10b981; }
+
+.admin-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1rem;
+  color: var(--text-muted);
+  text-align: center;
+}

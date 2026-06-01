@@ -1,0 +1,22 @@
+{
+  "name": "Step Up Planicorne",
+  "short_name": "Planicorne",
+  "description": "Créez et organisez vos contenus sociaux",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#11131e",
+  "theme_color": "#198CCC",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/pwa-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/pwa-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ]
+}
