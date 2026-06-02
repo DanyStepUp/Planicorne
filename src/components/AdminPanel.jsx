@@ -1,17 +1,17 @@
 import { useState } from 'react';
-import { 
-  Plus, 
-  Building, 
-  User, 
-  Users, 
-  Save, 
+import {
+  Plus,
+  Building,
+  User,
+  Users,
+  Save,
   ShieldAlert,
   Edit
 } from 'lucide-react';
-import { 
-  insertCompany, 
-  insertClient, 
-  insertStepupUser, 
+import {
+  insertCompany,
+  insertClient,
+  insertStepupUser,
   createAppUser,
   updateCompany,
   updateClient,
@@ -20,11 +20,11 @@ import {
 import SecureMedia from './SecureMedia';
 import './AdminPanel.css';
 
-export default function AdminPanel({ 
-  companies = [], 
-  clients = [], 
-  stepupUsers = [], 
-  onRefreshData 
+export default function AdminPanel({
+  companies = [],
+  clients = [],
+  stepupUsers = [],
+  onRefreshData
 }) {
   const [activeFormTab, setActiveFormTab] = useState('company'); // company, client, stepup
   const [activeListTab, setActiveListTab] = useState('companies'); // companies, clients, stepup
@@ -119,7 +119,7 @@ export default function AdminPanel({
     setEditingCompany(comp);
     setCompanyName(comp.name);
     setLogoUrl(comp.logo_drive_id ? `https://drive.google.com/file/d/${comp.logo_drive_id}/view` : '');
-    
+
     let details = null;
     if (comp.contract_details) {
       try {
@@ -230,7 +230,7 @@ export default function AdminPanel({
         newsletter: { count: 0, period: 'month' },
         unquantifiable: ''
       });
-      
+
       if (onRefreshData) await onRefreshData();
     } catch (err) {
       console.error(err);
@@ -306,7 +306,7 @@ export default function AdminPanel({
       setClientEmail('');
       setClientPassword('');
       setSelectedCompanyId('');
-      
+
       if (onRefreshData) await onRefreshData();
     } catch (err) {
       console.error(err);
@@ -365,7 +365,7 @@ export default function AdminPanel({
       setStepupEmail('');
       setStepupPassword('');
       setStepupRole('Rédacteur');
-      
+
       if (onRefreshData) await onRefreshData();
     } catch (err) {
       console.error(err);
@@ -389,7 +389,7 @@ export default function AdminPanel({
         {/* COLONNE GAUCHE - FORMULAIRES DE CRÉATION/MODIFICATION */}
         <div className="admin-forms-column glass-panel">
           <div className="admin-tab-nav">
-            <button 
+            <button
               className={`admin-tab-btn ${activeFormTab === 'company' ? 'active' : ''}`}
               onClick={() => setActiveFormTab('company')}
               disabled={!!editingCompany || !!editingClient || !!editingStepup}
@@ -397,7 +397,7 @@ export default function AdminPanel({
               <Building size={16} />
               <span>Entreprise & Contrat</span>
             </button>
-            <button 
+            <button
               className={`admin-tab-btn ${activeFormTab === 'client' ? 'active' : ''}`}
               onClick={() => setActiveFormTab('client')}
               disabled={!!editingCompany || !!editingClient || !!editingStepup}
@@ -405,7 +405,7 @@ export default function AdminPanel({
               <User size={16} />
               <span>Utilisateur Client</span>
             </button>
-            <button 
+            <button
               className={`admin-tab-btn ${activeFormTab === 'stepup' ? 'active' : ''}`}
               onClick={() => setActiveFormTab('stepup')}
               disabled={!!editingCompany || !!editingClient || !!editingStepup}
@@ -420,11 +420,11 @@ export default function AdminPanel({
             {activeFormTab === 'company' && (
               <form onSubmit={handleSaveCompany} className="admin-form animate-fade-in">
                 <h3>{editingCompany ? `Modifier l'Entreprise : ${editingCompany.name}` : 'Nouvelle Entreprise'}</h3>
-                
+
                 <div className="form-group">
                   <label>Nom de l'entreprise</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     placeholder="Ex: Acapela Corp"
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
@@ -434,8 +434,8 @@ export default function AdminPanel({
 
                 <div className="form-group">
                   <label>Lien Google Drive du Logo (Optionnel)</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     placeholder="Coller le lien de partage du fichier logo..."
                     value={logoUrl}
                     onChange={(e) => setLogoUrl(e.target.value)}
@@ -444,71 +444,71 @@ export default function AdminPanel({
                 </div>
 
                 <div className="contract-grid-title">Détails de production & Fréquence par canal :</div>
-                
+
                 <div className="contract-inputs-grid">
                   <div className="form-group">
-                    <label>LinkedIn (mensuel)</label>
-                    <input 
-                      type="number" 
-                      min="0" 
-                      value={contractDetails.linkedin.count} 
+                    <label>LinkedIn</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={contractDetails.linkedin.count}
                       onChange={(e) => setContractDetails(prev => ({
                         ...prev,
                         linkedin: { ...prev.linkedin, count: parseInt(e.target.value) || 0 }
-                      }))} 
+                      }))}
                     />
                   </div>
 
                   <div className="form-group">
-                    <label>Facebook (mensuel)</label>
-                    <input 
-                      type="number" 
-                      min="0" 
-                      value={contractDetails.facebook.count} 
+                    <label>Facebook</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={contractDetails.facebook.count}
                       onChange={(e) => setContractDetails(prev => ({
                         ...prev,
                         facebook: { ...prev.facebook, count: parseInt(e.target.value) || 0 }
-                      }))} 
+                      }))}
                     />
                   </div>
 
                   <div className="form-group">
-                    <label>Instagram (mensuel)</label>
-                    <input 
-                      type="number" 
-                      min="0" 
-                      value={contractDetails.instagram.count} 
+                    <label>Instagram</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={contractDetails.instagram.count}
                       onChange={(e) => setContractDetails(prev => ({
                         ...prev,
                         instagram: { ...prev.instagram, count: parseInt(e.target.value) || 0 }
-                      }))} 
+                      }))}
                     />
                   </div>
 
                   <div className="form-group">
-                    <label>Google Business (mensuel)</label>
-                    <input 
-                      type="number" 
-                      min="0" 
-                      value={contractDetails.google.count} 
+                    <label>Google Business</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={contractDetails.google.count}
                       onChange={(e) => setContractDetails(prev => ({
                         ...prev,
                         google: { ...prev.google, count: parseInt(e.target.value) || 0 }
-                      }))} 
+                      }))}
                     />
                   </div>
 
                   <div className="form-group">
-                    <label>Billet de Blog (flexible)</label>
+                    <label>Billet de Blog</label>
                     <div style={{ display: 'flex', gap: '0.4rem' }}>
-                      <input 
-                        type="number" 
-                        min="0" 
-                        value={contractDetails.blog.count} 
+                      <input
+                        type="number"
+                        min="0"
+                        value={contractDetails.blog.count}
                         onChange={(e) => setContractDetails(prev => ({
                           ...prev,
                           blog: { ...prev.blog, count: parseInt(e.target.value) || 0 }
-                        }))} 
+                        }))}
                         style={{ width: '70px', flex: '0 0 70px' }}
                       />
                       <select
@@ -527,16 +527,16 @@ export default function AdminPanel({
                   </div>
 
                   <div className="form-group">
-                    <label>Newsletter (flexible)</label>
+                    <label>Newsletter</label>
                     <div style={{ display: 'flex', gap: '0.4rem' }}>
-                      <input 
-                        type="number" 
-                        min="0" 
-                        value={contractDetails.newsletter.count} 
+                      <input
+                        type="number"
+                        min="0"
+                        value={contractDetails.newsletter.count}
                         onChange={(e) => setContractDetails(prev => ({
                           ...prev,
                           newsletter: { ...prev.newsletter, count: parseInt(e.target.value) || 0 }
-                        }))} 
+                        }))}
                         style={{ width: '70px', flex: '0 0 70px' }}
                       />
                       <select
@@ -557,9 +557,9 @@ export default function AdminPanel({
 
                 <div className="form-group" style={{ marginTop: '1.25rem', marginBottom: '1.25rem' }}>
                   <label htmlFor="company-unquantifiable">Contrats non quantifiables (Optionnel)</label>
-                  <input 
+                  <input
                     id="company-unquantifiable"
-                    type="text" 
+                    type="text"
                     placeholder="Ex: Gestion des avis Google My Business, Trustpilot, etc."
                     value={contractDetails.unquantifiable || ''}
                     onChange={(e) => setContractDetails(prev => ({
@@ -592,9 +592,9 @@ export default function AdminPanel({
 
                 <div className="form-group">
                   <label>Entreprise rattachée</label>
-                  <select 
-                    value={selectedCompanyId} 
-                    onChange={(e) => setSelectedCompanyId(e.target.value)} 
+                  <select
+                    value={selectedCompanyId}
+                    onChange={(e) => setSelectedCompanyId(e.target.value)}
                     required
                   >
                     <option value="">-- Sélectionner l'entreprise --</option>
@@ -606,8 +606,8 @@ export default function AdminPanel({
 
                 <div className="form-group">
                   <label>Nom complet</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     placeholder="Ex: Thomas Anderson"
                     value={clientName}
                     onChange={(e) => setClientName(e.target.value)}
@@ -617,8 +617,8 @@ export default function AdminPanel({
 
                 <div className="form-group">
                   <label>E-mail de connexion</label>
-                  <input 
-                    type="email" 
+                  <input
+                    type="email"
                     placeholder="Ex: thomas@acapela.com"
                     value={clientEmail}
                     onChange={(e) => setClientEmail(e.target.value)}
@@ -628,8 +628,8 @@ export default function AdminPanel({
 
                 <div className="form-group">
                   <label>Mot de passe {editingClient && <span style={{ fontWeight: 'normal', color: 'var(--text-muted)', fontSize: '0.8rem' }}>(Laisser vide si inchangé)</span>}</label>
-                  <input 
-                    type="password" 
+                  <input
+                    type="password"
                     placeholder={editingClient ? "Saisir un nouveau mot de passe..." : "Créer un mot de passe d'accès..."}
                     value={clientPassword}
                     onChange={(e) => setClientPassword(e.target.value)}
@@ -658,8 +658,8 @@ export default function AdminPanel({
 
                 <div className="form-group">
                   <label>Nom complet</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     placeholder="Ex: Chloé StepUp"
                     value={stepupName}
                     onChange={(e) => setStepupName(e.target.value)}
@@ -669,8 +669,8 @@ export default function AdminPanel({
 
                 <div className="form-group">
                   <label>Rôle interne</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     placeholder="Ex: Rédactrice, Graphiste, Chef de Projet"
                     value={stepupRole}
                     onChange={(e) => setStepupRole(e.target.value)}
@@ -680,8 +680,8 @@ export default function AdminPanel({
 
                 <div className="form-group">
                   <label>E-mail professionnel</label>
-                  <input 
-                    type="email" 
+                  <input
+                    type="email"
                     placeholder="Ex: chloe@stepup.fr"
                     value={stepupEmail}
                     onChange={(e) => setStepupEmail(e.target.value)}
@@ -691,8 +691,8 @@ export default function AdminPanel({
 
                 <div className="form-group">
                   <label>Mot de passe {editingStepup && <span style={{ fontWeight: 'normal', color: 'var(--text-muted)', fontSize: '0.8rem' }}>(Laisser vide si inchangé)</span>}</label>
-                  <input 
-                    type="password" 
+                  <input
+                    type="password"
                     placeholder={editingStepup ? "Saisir un nouveau mot de passe..." : "Mot de passe provisoire..."}
                     value={stepupPassword}
                     onChange={(e) => setStepupPassword(e.target.value)}
@@ -719,7 +719,7 @@ export default function AdminPanel({
         {/* COLONNE DROITE - LISTE DE TOUTES LES ENTITÉS SÉLECTIONNABLES */}
         <div className="admin-list-column glass-panel">
           <div className="admin-tab-nav" style={{ marginBottom: '1.25rem' }}>
-            <button 
+            <button
               className={`admin-tab-btn ${activeListTab === 'companies' ? 'active' : ''}`}
               onClick={() => setActiveListTab('companies')}
               style={{ padding: '0.75rem 0.25rem' }}
@@ -727,7 +727,7 @@ export default function AdminPanel({
               <Building size={15} />
               <span style={{ fontSize: '0.8rem' }}>Entreprises ({companies.length})</span>
             </button>
-            <button 
+            <button
               className={`admin-tab-btn ${activeListTab === 'clients' ? 'active' : ''}`}
               onClick={() => setActiveListTab('clients')}
               style={{ padding: '0.75rem 0.25rem' }}
@@ -735,7 +735,7 @@ export default function AdminPanel({
               <User size={15} />
               <span style={{ fontSize: '0.8rem' }}>Clients ({clients.length})</span>
             </button>
-            <button 
+            <button
               className={`admin-tab-btn ${activeListTab === 'stepup' ? 'active' : ''}`}
               onClick={() => setActiveListTab('stepup')}
               style={{ padding: '0.75rem 0.25rem' }}
@@ -744,7 +744,7 @@ export default function AdminPanel({
               <span style={{ fontSize: '0.8rem' }}>Membres ({stepupUsers.length})</span>
             </button>
           </div>
-          
+
           <div className="admin-companies-table-wrapper" style={{ border: 'none' }}>
             {/* LISTE 1 : ENTREPRISES */}
             {activeListTab === 'companies' && (
@@ -764,10 +764,10 @@ export default function AdminPanel({
                         <td className="company-logo-cell">
                           {comp.logo_drive_id ? (
                             <div className="admin-logo-wrapper">
-                              <SecureMedia 
-                                driveId={comp.logo_drive_id} 
-                                type="image/png" 
-                                alt="Logo" 
+                              <SecureMedia
+                                driveId={comp.logo_drive_id}
+                                type="image/png"
+                                alt="Logo"
                               />
                             </div>
                           ) : (
@@ -788,9 +788,9 @@ export default function AdminPanel({
                           </div>
                         </td>
                         <td style={{ textAlign: 'center' }}>
-                          <button 
+                          <button
                             type="button"
-                            className="btn-option" 
+                            className="btn-option"
                             style={{ padding: '0.4rem', background: 'rgba(25, 140, 204, 0.1)', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'var(--primary-color)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                             onClick={() => handleStartEditCompany(comp)}
                           >
@@ -838,9 +838,9 @@ export default function AdminPanel({
                           )}
                         </td>
                         <td style={{ textAlign: 'center' }}>
-                          <button 
+                          <button
                             type="button"
-                            className="btn-option" 
+                            className="btn-option"
                             style={{ padding: '0.4rem', background: 'rgba(25, 140, 204, 0.1)', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'var(--primary-color)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                             onClick={() => handleStartEditClient(client)}
                           >
@@ -884,9 +884,9 @@ export default function AdminPanel({
                           </span>
                         </td>
                         <td style={{ textAlign: 'center' }}>
-                          <button 
+                          <button
                             type="button"
-                            className="btn-option" 
+                            className="btn-option"
                             style={{ padding: '0.4rem', background: 'rgba(25, 140, 204, 0.1)', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'var(--primary-color)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                             onClick={() => handleStartEditStepup(user)}
                           >
