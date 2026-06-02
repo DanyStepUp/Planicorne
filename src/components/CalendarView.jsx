@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon } from 'lucide-react';
 import { FaFacebook, FaInstagram, FaLinkedin, FaGoogle } from 'react-icons/fa';
-import SecureMedia from './SecureMedia';
+
 import './CalendarView.css';
 
 const PLATFORM_ICONS = {
@@ -18,12 +18,7 @@ const PLATFORM_COLORS = {
   google: '#EA4335'
 };
 
-const PLATFORM_LABELS = {
-  facebook: 'Facebook',
-  instagram: 'Instagram',
-  linkedin: 'LinkedIn',
-  google: 'Google My Business'
-};
+
 
 export default function CalendarView({ cards = [], onEditCard, onAddCardDirectly }) {
   const [currentDate, setCurrentDate] = useState(new Date());

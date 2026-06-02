@@ -1,5 +1,5 @@
-import React from 'react';
-import { Moon, Sun, FileText, Columns, Cloud, FolderOpen, Database, LogOut, User, Calendar, Users } from 'lucide-react';
+
+import { Moon, Sun, Columns, Cloud, FolderOpen, Database, LogOut, User, Calendar, Users } from 'lucide-react';
 import './Header.css';
 
 export default function Header({

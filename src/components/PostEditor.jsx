@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { UploadCloud, FileText, Trash2, Paperclip } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { FileText, Trash2, Paperclip } from 'lucide-react';
 import SecureMedia from './SecureMedia';
 import './PostEditor.css';
 

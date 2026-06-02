@@ -123,12 +123,35 @@ export async function deleteCardFromDirectory(directoryHandle, cardId) {
 const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3/files';
 const UPLOAD_API_BASE = 'https://www.googleapis.com/upload/drive/v3/files';
 
+// Fonction de requêtage avec gestion robuste des erreurs temporaires et limites de taux (Exponential Backoff)
+async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await fetch(url, options);
+      // Gérer la limite de taux (429) ou les erreurs temporaires serveur (5xx)
+      if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
+        if (i === retries - 1) return response; // Retourner la dernière réponse si c'est la fin
+        console.warn(`Drive API rate limited or server error (${response.status}). Retrying in ${delay}ms... (Attempt ${i + 1}/${retries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2; // Croissance exponentielle
+        continue;
+      }
+      return response;
+    } catch (error) {
+      if (i === retries - 1) throw error;
+      console.warn(`Network error. Retrying in ${delay}ms... (Attempt ${i + 1}/${retries})`, error);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      delay *= 2;
+    }
+  }
+}
+
 // Recherche ou crée le dossier "AllPosts" dans Google Drive Cloud
 export async function getOrCreateDriveFolder(accessToken) {
   const query = encodeURIComponent("name = 'AllPosts' and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
   const searchUrl = `${DRIVE_API_BASE}?q=${query}&fields=files(id,name)`;
   
-  const searchRes = await fetch(searchUrl, {
+  const searchRes = await fetchWithRetry(searchUrl, {
     headers: { 'Authorization': `Bearer ${accessToken}` }
   });
   
@@ -142,7 +165,7 @@ export async function getOrCreateDriveFolder(accessToken) {
   }
   
   // Création du dossier
-  const createRes = await fetch(DRIVE_API_BASE, {
+  const createRes = await fetchWithRetry(DRIVE_API_BASE, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
@@ -162,12 +185,12 @@ export async function getOrCreateDriveFolder(accessToken) {
   return createData.id;
 }
 
-// Lit toutes les cartes de posts depuis Google Drive Cloud
+// Lit toutes les cartes de posts depuis Google Drive Cloud (avec Cache Incremental & Quota Protection)
 export async function readCardsFromDriveCloud(accessToken, folderId) {
   const query = encodeURIComponent(`'${folderId}' in parents and mimeType = 'application/json' and trashed = false`);
-  const listUrl = `${DRIVE_API_BASE}?q=${query}&fields=files(id,name)`;
+  const listUrl = `${DRIVE_API_BASE}?q=${query}&fields=files(id,name,modifiedTime)`;
   
-  const listRes = await fetch(listUrl, {
+  const listRes = await fetchWithRetry(listUrl, {
     headers: { 'Authorization': `Bearer ${accessToken}` }
   });
   
@@ -177,14 +200,37 @@ export async function readCardsFromDriveCloud(accessToken, folderId) {
   
   const listData = await listRes.json();
   const files = listData.files || [];
+  
+  // Charger le cache local existant
+  let cache = {};
+  try {
+    const cachedData = localStorage.getItem('gdrive_cards_cache');
+    if (cachedData) {
+      cache = JSON.parse(cachedData);
+    }
+  } catch (e) {
+    console.warn("Impossible de charger le cache gdrive_cards_cache, réinitialisation...", e);
+  }
+  
+  const newCache = {};
   const cards = [];
   
-  // Lecture de chaque fichier JSON
-  for (const file of files) {
-    if (file.name.startsWith('post-') && file.name.endsWith('.json')) {
+  // Filtrer les fichiers valides de posts
+  const postFiles = files.filter(f => f.name.startsWith('post-') && f.name.endsWith('.json'));
+  
+  // Lecture incrémentale
+  for (const file of postFiles) {
+    const cachedItem = cache[file.id];
+    
+    // Si l'élément est en cache et sa date de modification est inchangée, utiliser le cache local
+    if (cachedItem && cachedItem.modifiedTime === file.modifiedTime) {
+      cards.push(cachedItem.card);
+      newCache[file.id] = cachedItem;
+    } else {
+      // Sinon, télécharger le fichier depuis Drive
       try {
         const fileContentUrl = `${DRIVE_API_BASE}/${file.id}?alt=media`;
-        const contentRes = await fetch(fileContentUrl, {
+        const contentRes = await fetchWithRetry(fileContentUrl, {
           headers: { 'Authorization': `Bearer ${accessToken}` }
         });
         
@@ -193,11 +239,28 @@ export async function readCardsFromDriveCloud(accessToken, folderId) {
           // Associe l'ID de fichier Drive Cloud pour pouvoir le modifier ultérieurement
           cardData.cloudFileId = file.id;
           cards.push(cardData);
+          
+          newCache[file.id] = {
+            modifiedTime: file.modifiedTime,
+            card: cardData
+          };
         }
       } catch (err) {
         console.error(`Erreur de lecture du fichier Drive ${file.name}:`, err);
+        // Fallback sur le cache en cas d'erreur réseau ponctuelle pour conserver la donnée
+        if (cachedItem) {
+          cards.push(cachedItem.card);
+          newCache[file.id] = cachedItem;
+        }
       }
     }
+  }
+  
+  // Enregistrer le cache mis à jour dans localStorage
+  try {
+    localStorage.setItem('gdrive_cards_cache', JSON.stringify(newCache));
+  } catch (e) {
+    console.error("Impossible d'enregistrer le cache gdrive_cards_cache dans localStorage:", e);
   }
   
   return cards;
@@ -211,7 +274,7 @@ export async function writeCardToDriveCloud(accessToken, folderId, card) {
   const query = encodeURIComponent(`'${folderId}' in parents and name = '${fileName}' and trashed = false`);
   const searchUrl = `${DRIVE_API_BASE}?q=${query}&fields=files(id)`;
   
-  const searchRes = await fetch(searchUrl, {
+  const searchRes = await fetchWithRetry(searchUrl, {
     headers: { 'Authorization': `Bearer ${accessToken}` }
   });
   
@@ -226,7 +289,7 @@ export async function writeCardToDriveCloud(accessToken, folderId, card) {
   if (fileId) {
     // Mise à jour du contenu
     const updateUrl = `${UPLOAD_API_BASE}/${fileId}?uploadType=media`;
-    const updateRes = await fetch(updateUrl, {
+    const updateRes = await fetchWithRetry(updateUrl, {
       method: 'PATCH',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -242,7 +305,7 @@ export async function writeCardToDriveCloud(accessToken, folderId, card) {
     return fileId;
   } else {
     // Création des métadonnées du fichier
-    const createRes = await fetch(DRIVE_API_BASE, {
+    const createRes = await fetchWithRetry(DRIVE_API_BASE, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -264,7 +327,7 @@ export async function writeCardToDriveCloud(accessToken, folderId, card) {
     
     // Upload du contenu
     const uploadUrl = `${UPLOAD_API_BASE}/${newFileId}?uploadType=media`;
-    const uploadRes = await fetch(uploadUrl, {
+    const uploadRes = await fetchWithRetry(uploadUrl, {
       method: 'PATCH',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -289,7 +352,7 @@ export async function deleteCardFromDriveCloud(accessToken, folderId, cardId) {
   const query = encodeURIComponent(`'${folderId}' in parents and name = '${fileName}' and trashed = false`);
   const searchUrl = `${DRIVE_API_BASE}?q=${query}&fields=files(id)`;
   
-  const searchRes = await fetch(searchUrl, {
+  const searchRes = await fetchWithRetry(searchUrl, {
     headers: { 'Authorization': `Bearer ${accessToken}` }
   });
   
@@ -299,7 +362,7 @@ export async function deleteCardFromDriveCloud(accessToken, folderId, cardId) {
       const fileId = searchData.files[0].id;
       
       // Suppression définitive (ou mise à la corbeille)
-      const deleteRes = await fetch(`${DRIVE_API_BASE}/${fileId}`, {
+      const deleteRes = await fetchWithRetry(`${DRIVE_API_BASE}/${fileId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${accessToken}` }
       });
@@ -310,3 +373,90 @@ export async function deleteCardFromDriveCloud(accessToken, folderId, cardId) {
     }
   }
 }
+
+/**
+ * Liste les dossiers du Google Drive de l'utilisateur.
+ */
+export async function listDriveFolders(accessToken) {
+  const query = encodeURIComponent("mimeType = 'application/vnd.google-apps.folder' and trashed = false");
+  const listUrl = `${DRIVE_API_BASE}?q=${query}&fields=files(id,name)&orderBy=name`;
+  
+  const res = await fetch(listUrl, {
+    headers: { 'Authorization': `Bearer ${accessToken}` }
+  });
+  
+  if (!res.ok) {
+    throw new Error("Impossible de lister les dossiers Google Drive.");
+  }
+  
+  const data = await res.json();
+  return data.files || [];
+}
+
+/**
+ * Crée un nouveau dossier Google Drive.
+ */
+export async function createDriveFolder(accessToken, folderName) {
+  const res = await fetch(DRIVE_API_BASE, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      name: folderName,
+      mimeType: 'application/vnd.google-apps.folder'
+    })
+  });
+  
+  if (!res.ok) {
+    throw new Error(`Échec de la création du dossier "${folderName}".`);
+  }
+  
+  const data = await res.json();
+  return data.id;
+}
+
+/**
+ * Téléverse un fichier JSON de sauvegarde Supabase dans un dossier Google Drive spécifique.
+ */
+export async function uploadBackupToDrive(accessToken, folderId, data, fileName) {
+  // 1. Création du fichier vide avec parents
+  const createRes = await fetch(DRIVE_API_BASE, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      name: fileName,
+      parents: [folderId],
+      mimeType: 'application/json'
+    })
+  });
+  
+  if (!createRes.ok) {
+    throw new Error(`Échec de création du fichier "${fileName}" sur Google Drive.`);
+  }
+  
+  const createData = await createRes.json();
+  const fileId = createData.id;
+  
+  // 2. Remplissage avec le contenu
+  const uploadUrl = `${UPLOAD_API_BASE}/${fileId}?uploadType=media`;
+  const uploadRes = await fetch(uploadUrl, {
+    method: 'PATCH',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(data, null, 2)
+  });
+  
+  if (!uploadRes.ok) {
+    throw new Error(`Échec de téléversement du contenu de la sauvegarde.`);
+  }
+  
+  return fileId;
+}
+

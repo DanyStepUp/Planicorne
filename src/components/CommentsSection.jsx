@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { MessageSquare, Send, Calendar } from 'lucide-react';
 import { getCommentsForPost, insertComment } from '../utils/supabaseService';
 import './CommentsSection.css';
@@ -10,21 +10,19 @@ export default function CommentsSection({ postId, clients = [], stepupUsers = []
   const [fetching, setFetching] = useState(false);
   
   // Selected author profile
-  const [selectedAuthor, setSelectedAuthor] = useState('');
-
-  // Assigner automatiquement l'auteur basé sur l'utilisateur connecté
-  useEffect(() => {
+  const [selectedAuthor] = useState(() => {
     if (currentUser) {
       if (currentUser.role?.trim().toLowerCase() === 'client' && currentUser.client_id) {
-        setSelectedAuthor(`client:${currentUser.client_id}`);
+        return `client:${currentUser.client_id}`;
       } else if (currentUser.stepup_user_id) {
-        setSelectedAuthor(`stepup_user:${currentUser.stepup_user_id}`);
+        return `stepup_user:${currentUser.stepup_user_id}`;
       }
     }
-  }, [currentUser]);
+    return '';
+  });
 
   // Load comments
-  const loadComments = async () => {
+  const loadComments = useCallback(async () => {
     if (!postId) return;
     setFetching(true);
     try {
@@ -35,11 +33,69 @@ export default function CommentsSection({ postId, clients = [], stepupUsers = []
     } finally {
       setFetching(false);
     }
-  };
+  }, [postId]);
+
+  const [notifiedCommentIds, setNotifiedCommentIds] = useState(new Set());
+  const [isFirstLoad, setIsFirstLoad] = useState(true);
+
+  // Request browser notification permission on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
+    }
+  }, []);
+
+  // Monitor new comments for @+prénom mentions
+  useEffect(() => {
+    if (comments.length > 0 && currentUser) {
+      if (isFirstLoad) {
+        // Initialize notified IDs with existing comments to prevent notification spam on first load
+        const ids = new Set(comments.map(c => c.id));
+        setNotifiedCommentIds(ids);
+        setIsFirstLoad(false);
+      } else {
+        const currentFirstName = currentUser.name?.split(' ')[0]?.toLowerCase();
+        if (currentFirstName) {
+          comments.forEach(c => {
+            if (!notifiedCommentIds.has(c.id)) {
+              const mentionText = `@+${currentFirstName}`;
+              const isOwnComment = c.authorName === currentUser.name;
+              
+              if (c.content.toLowerCase().includes(mentionText) && !isOwnComment) {
+                if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+                  try {
+                    new Notification(`Mention dans Planicorne`, {
+                      body: `${c.authorName} : ${c.content}`,
+                      icon: '/Logo Step Up.png'
+                    });
+                  } catch (e) {
+                    console.warn("Failed to trigger browser notification:", e);
+                  }
+                }
+              }
+              
+              setNotifiedCommentIds(prev => {
+                const next = new Set(prev);
+                next.add(c.id);
+                return next;
+              });
+            }
+          });
+        }
+      }
+    }
+  }, [comments, currentUser, isFirstLoad, notifiedCommentIds]);
 
   useEffect(() => {
-    loadComments();
-  }, [postId]);
+    setIsFirstLoad(true);
+    setNotifiedCommentIds(new Set());
+    const t = setTimeout(() => {
+      loadComments();
+    }, 0);
+    return () => clearTimeout(t);
+  }, [loadComments, postId]);
 
   const handleSubmitComment = async (e) => {
     e.preventDefault();

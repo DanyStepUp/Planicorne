@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Mail, Lock, ShieldAlert, LogIn, Sparkles } from 'lucide-react';
 import { authenticateUser, logConnection } from '../utils/supabaseService';
 import './Login.css';
@@ -33,11 +33,7 @@ export default function Login({ onLoginSuccess }) {
     }
   };
 
-  const handleQuickSelect = (qEmail, qPassword) => {
-    setEmail(qEmail);
-    setPassword(qPassword);
-    setError(null);
-  };
+
 
   return (
     <div className="login-wrapper animate-fade-in">
@@ -63,7 +59,7 @@ export default function Login({ onLoginSuccess }) {
               <input 
                 id="login-email"
                 type="email" 
-                placeholder="dany.r@stepupdigital.net" 
+                placeholder="votre@email.com" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -98,36 +94,7 @@ export default function Login({ onLoginSuccess }) {
           </button>
         </form>
 
-        {/* COMPTES DE TEST RAPIDES */}
-        <div className="quick-access-demo">
-          <h4>
-            <Sparkles size={14} style={{ color: 'var(--primary-color)' }} />
-            <span>Sélection rapide de profil (Rôles) :</span>
-          </h4>
-          <div className="demo-buttons-grid">
-            <button 
-              type="button"
-              className="btn-demo-acc btn-admin"
-              onClick={() => handleQuickSelect('dany.r@stepupdigital.net', 'dany2026')}
-            >
-              👑 Dany R (Admin)
-            </button>
-            <button 
-              type="button"
-              className="btn-demo-acc btn-stepup"
-              onClick={() => handleQuickSelect('chloe@stepup.fr', 'chloe123')}
-            >
-              👩‍💻 Chloé (Step Up)
-            </button>
-            <button 
-              type="button"
-              className="btn-demo-acc btn-client"
-              onClick={() => handleQuickSelect('thomas@acapela.com', 'thomas123')}
-            >
-              💼 Thomas (Client)
-            </button>
-          </div>
-        </div>
+
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { X, Save, Columns } from 'lucide-react';
 import './SaveCardModal.css';
 
@@ -13,44 +13,37 @@ export default function SaveCardModal({
   companies = [],
   isUpdate = false
 }) {
-  const [title, setTitle] = useState('');
-  const [column, setColumn] = useState('draft');
-  const [scheduledAt, setScheduledAt] = useState('');
-  const [companyId, setCompanyId] = useState('');
-
-  useEffect(() => {
-    if (isOpen) {
-      setTitle(initialTitle);
-      setColumn(initialColumn);
-      setCompanyId(initialCompanyId || '');
-      if (initialScheduledAt) {
-        try {
-          const date = new Date(initialScheduledAt);
-          const offset = date.getTimezoneOffset();
-          const adjustedDate = new Date(date.getTime() - (offset*60*1000));
-          setScheduledAt(adjustedDate.toISOString().substring(0, 16));
-        } catch {
-          setScheduledAt('');
-        }
-      } else {
-        const now = new Date();
-        const offset = now.getTimezoneOffset();
-        const adjustedDate = new Date(now.getTime() - (offset*60*1000));
-        setScheduledAt(adjustedDate.toISOString().substring(0, 16));
+  const [title, setTitle] = useState(initialTitle);
+  const [column, setColumn] = useState(initialColumn);
+  const [companyId, setCompanyId] = useState(initialCompanyId || (companies.length > 0 ? companies[0].id : ''));
+  const [scheduledAt, setScheduledAt] = useState(() => {
+    if (initialScheduledAt) {
+      try {
+        const date = new Date(initialScheduledAt);
+        const offset = date.getTimezoneOffset();
+        const adjustedDate = new Date(date.getTime() - (offset*60*1000));
+        return adjustedDate.toISOString().substring(0, 16);
+      } catch {
+        return '';
       }
+    } else {
+      const now = new Date();
+      const offset = now.getTimezoneOffset();
+      const adjustedDate = new Date(now.getTime() - (offset*60*1000));
+      return adjustedDate.toISOString().substring(0, 16);
     }
-  }, [isOpen, initialTitle, initialColumn, initialScheduledAt, initialCompanyId]);
+  });
 
   if (!isOpen) return null;
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim() || !companyId) return;
     onSave({ 
       title: title.trim(), 
       column, 
       scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
-      company_id: companyId || null
+      company_id: companyId
     });
     onClose();
   };
@@ -67,7 +60,7 @@ export default function SaveCardModal({
             <X size={20} />
           </button>
         </div>
-
+ 
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
             <div className="form-group">
@@ -84,7 +77,7 @@ export default function SaveCardModal({
               />
               <span className="char-count">{title.length} / 80</span>
             </div>
-
+ 
             <div className="form-group">
               <label htmlFor="card-scheduled">Date & Heure de Publication</label>
               <input 
@@ -95,13 +88,14 @@ export default function SaveCardModal({
                 required
               />
             </div>
-
+ 
             <div className="form-group">
               <label htmlFor="card-company">Entreprise / Client</label>
               <select 
                 id="card-company"
                 value={companyId} 
                 onChange={(e) => setCompanyId(e.target.value)}
+                required
               >
                 <option value="">-- Sélectionner une entreprise --</option>
                 {companies.map(c => (

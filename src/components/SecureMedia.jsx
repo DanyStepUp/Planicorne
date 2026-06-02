@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 
 /**
  * Component to securely render images and videos from Google Drive
@@ -6,32 +6,40 @@ import React, { useState, useEffect } from 'react';
  * the file's temporary public thumbnail from Google Drive API.
  */
 export default function SecureMedia({ src, driveId, type, className, alt, style, isVideoPlayer = false }) {
-  const [mediaUrl, setMediaUrl] = useState('');
   const [mimeType, setMimeType] = useState(type || '');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
+  const [mediaUrl, setMediaUrl] = useState(() => {
+    if (!driveId) return src || '';
+    const token = localStorage.getItem('gdrive_access_token');
+    if (!token) {
+      if (isVideoPlayer && mimeType?.startsWith('video/')) {
+        return `https://drive.google.com/file/d/${driveId}/preview`;
+      }
+      return src || `https://lh3.googleusercontent.com/d/${driveId}`;
+    }
+    return '';
+  });
 
   useEffect(() => {
     if (!driveId) {
-      setMediaUrl(src);
-      return;
+      const t = setTimeout(() => setMediaUrl(src || ''), 0);
+      return () => clearTimeout(t);
     }
 
     const token = localStorage.getItem('gdrive_access_token');
     
     // Fallback if no token is available
     if (!token) {
-      if (isVideoPlayer && mimeType?.startsWith('video/')) {
-        setMediaUrl(`https://drive.google.com/file/d/${driveId}/preview`);
-      } else {
-        setMediaUrl(src || `https://lh3.googleusercontent.com/d/${driveId}`);
-      }
-      return;
+      const t = setTimeout(() => {
+        if (isVideoPlayer && mimeType?.startsWith('video/')) {
+          setMediaUrl(`https://drive.google.com/file/d/${driveId}/preview`);
+        } else {
+          setMediaUrl(src || `https://lh3.googleusercontent.com/d/${driveId}`);
+        }
+      }, 0);
+      return () => clearTimeout(t);
     }
 
     let isMounted = true;
-    setLoading(true);
-    setError(false);
 
     const fetchMetadata = async () => {
       try {
@@ -65,13 +73,8 @@ export default function SecureMedia({ src, driveId, type, className, alt, style,
       } catch (e) {
         console.error("Error loading secure media:", e);
         if (isMounted) {
-          setError(true);
           // Fallback to standard Google Photos CDN / Direct URL
           setMediaUrl(src || `https://lh3.googleusercontent.com/d/${driveId}`);
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
         }
       }
     };
@@ -81,7 +84,7 @@ export default function SecureMedia({ src, driveId, type, className, alt, style,
     return () => {
       isMounted = false;
     };
-  }, [driveId, src, isVideoPlayer]);
+  }, [driveId, src, isVideoPlayer, mimeType]);
 
   if (isVideoPlayer && mimeType?.startsWith('video/')) {
     return (

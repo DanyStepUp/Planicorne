@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Columns,
   Search,
@@ -7,14 +7,15 @@ import {
   Edit3,
   Copy,
   Check,
-  ChevronRight,
   Filter,
   MoreVertical,
   Calendar,
   ExternalLink,
   FileText,
   Mail,
-  Building
+  Building,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import {
   FaFacebook,
@@ -67,7 +68,6 @@ export default function Board({
   onEditCard,
   onAddCardDirectly,
   onUpdateCardDate,
-  syncMode,
   currentUser
 }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -76,6 +76,14 @@ export default function Board({
   const [draggedOverColumn, setDraggedOverColumn] = useState(null);
   const [copiedCardId, setCopiedCardId] = useState(null);
   const [activeMenuCardId, setActiveMenuCardId] = useState(null);
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
+
+  // Set default company filter to first company when companies load
+  useEffect(() => {
+    if (selectedCompanyFilter === 'all' && companies.length > 0) {
+      setSelectedCompanyFilter(companies[0].id);
+    }
+  }, [companies, selectedCompanyFilter]);
 
   const isClient = currentUser?.role?.trim().toLowerCase() === 'client';
   const activeColumns = isClient
@@ -190,6 +198,7 @@ export default function Board({
       content: "",
       platform: 'linkedin',
       status: columnId,
+      company_id: selectedCompanyFilter !== 'all' ? selectedCompanyFilter : (companies.length > 0 ? companies[0].id : null),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
@@ -199,18 +208,45 @@ export default function Board({
   const renderContractProgress = (company) => {
     if (!company) return null;
 
+    let details = null;
+    if (company.contract_details) {
+      try {
+        details = typeof company.contract_details === 'string'
+          ? JSON.parse(company.contract_details)
+          : company.contract_details;
+      } catch (e) {
+        console.error("Failed to parse contract_details:", e);
+      }
+    }
+
     const platforms = [
-      { key: 'linkedin', label: 'LinkedIn', target: company.contract_linkedin, color: '#0A66C2' },
-      { key: 'facebook', label: 'Facebook', target: company.contract_facebook, color: '#1877F2' },
-      { key: 'instagram', label: 'Instagram', target: company.contract_instagram, color: '#E4405F' },
-      { key: 'google', label: 'Google Business', target: company.contract_google, color: '#EA4335' },
-      { key: 'blog', label: 'Billet de Blog', target: company.contract_blog, color: '#6366f1' },
-      { key: 'newsletter', label: 'Newsletter', target: company.contract_newsletter, color: '#10b981' }
-    ];
+      { key: 'linkedin', label: 'LinkedIn', color: '#0A66C2' },
+      { key: 'facebook', label: 'Facebook', color: '#1877F2' },
+      { key: 'instagram', label: 'Instagram', color: '#E4405F' },
+      { key: 'google', label: 'Google Business', color: '#EA4335' },
+      { key: 'blog', label: 'Billet de Blog', color: '#6366f1' },
+      { key: 'newsletter', label: 'Newsletter', color: '#10b981' }
+    ].map(p => {
+      let target = 0;
+      let labelSuffix = '';
+      if (details?.frequencies?.[p.key]) {
+        const freq = details.frequencies[p.key];
+        target = freq.count || 0;
+        if (freq.period === '2_months') labelSuffix = ' (tous les 2 mois)';
+        else if (freq.period === '3_months') labelSuffix = ' (tous les 3 mois)';
+        else if (freq.period === 'week') labelSuffix = ' (par semaine)';
+        else if (freq.period === 'month') labelSuffix = ' (mensuel)';
+      } else {
+        target = company[`contract_${p.key}`] || 0;
+        labelSuffix = ' (mensuel)';
+      }
+      return { ...p, target, label: p.label + labelSuffix };
+    });
 
     const activeContracts = platforms.filter(p => p.target > 0);
+    const hasUnquantifiable = typeof details?.unquantifiable === 'string' ? details.unquantifiable.trim().length > 0 : false;
 
-    if (activeContracts.length === 0) {
+    if (activeContracts.length === 0 && !hasUnquantifiable) {
       return (
         <div className="empty-contract-msg">
           Aucun objectif de publication configuré.
@@ -246,6 +282,15 @@ export default function Board({
             </div>
           );
         })}
+
+        {hasUnquantifiable && (
+          <div className="unquantifiable-contracts-section" style={{ marginTop: '0.75rem', borderTop: '1px solid var(--surface-border)', paddingTop: '0.75rem' }}>
+            <span style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '0.4rem' }}>Services non quantifiables :</span>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-main)', fontWeight: 500, lineHeight: 1.4 }}>
+              ✨ {details.unquantifiable}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -285,21 +330,16 @@ export default function Board({
     <div className={`board-layout-container ${!isClient ? 'has-sidebar' : ''} animate-fade-in`}>
       {/* SIDEBAR POUR STEP UP / ADMIN */}
       {!isClient && (
-        <aside className="board-sidebar glass-panel">
-          <div className="sidebar-header">
+        <aside className={`board-sidebar glass-panel ${isSidebarExpanded ? 'expanded' : 'collapsed'}`}>
+          <div className="sidebar-header" onClick={() => setIsSidebarExpanded(!isSidebarExpanded)} style={{ cursor: 'pointer' }}>
             <Building size={18} className="sidebar-header-icon" />
-            <h3>Filtrer par Client</h3>
+            <h3 style={{ flexGrow: 1 }}>Filtrer par Client</h3>
+            <span className="sidebar-toggle-icon-mobile">
+              {isSidebarExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </span>
           </div>
           
           <div className="sidebar-companies-list">
-            <button
-              className={`sidebar-company-btn ${selectedCompanyFilter === 'all' ? 'active' : ''}`}
-              onClick={() => setSelectedCompanyFilter('all')}
-            >
-              <div className="btn-logo-fallback">💼</div>
-              <span className="btn-name">Toutes les entreprises</span>
-              <span className="sidebar-badge">{cards.length}</span>
-            </button>
 
             {companies.map(comp => {
               const compCardsCount = cards.filter(c => c.company_id === comp.id).length;

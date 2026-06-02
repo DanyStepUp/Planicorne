@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { FaFacebook, FaInstagram, FaLinkedin, FaGoogle } from 'react-icons/fa';
 import './PlatformSelector.css';
 

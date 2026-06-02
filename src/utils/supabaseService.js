@@ -26,11 +26,23 @@ export async function checkTableExists() {
 /**
  * Fetches all posts from the Supabase database, ordered by updatedAt descending.
  */
-export async function fetchPosts() {
-  const { data, error } = await supabase
+export async function fetchPosts(currentUser = null) {
+  let query = supabase
     .from('posts')
-    .select('*, companies(name)')
-    .order('updatedAt', { ascending: false });
+    .select('*, companies(name)');
+
+  if (currentUser) {
+    const role = currentUser.role?.trim().toLowerCase();
+    if (role === 'client') {
+      if (currentUser.company_id) {
+        query = query.eq('company_id', currentUser.company_id);
+      } else if (currentUser.client_id) {
+        query = query.eq('client_id', currentUser.client_id);
+      }
+    }
+  }
+
+  const { data, error } = await query.order('updatedAt', { ascending: false });
 
   if (error) {
     throw error;
@@ -314,7 +326,8 @@ export async function insertCompany(company) {
       contract_instagram: company.contract_instagram || 0,
       contract_google: company.contract_google || 0,
       contract_blog: company.contract_blog || 0,
-      contract_newsletter: company.contract_newsletter || 0
+      contract_newsletter: company.contract_newsletter || 0,
+      contract_details: company.contract_details || null
     }])
     .select();
 
@@ -403,3 +416,131 @@ export async function logConnection(email, role) {
     console.error("Échec de journalisation de la connexion:", err);
   }
 }
+
+/**
+ * Met à jour une entreprise existante dans Supabase.
+ */
+export async function updateCompany(id, company) {
+  const { data, error } = await supabase
+    .from('companies')
+    .update({
+      name: company.name,
+      logo_drive_id: company.logo_drive_id || null,
+      contract_linkedin: parseInt(company.contract_linkedin) || 0,
+      contract_facebook: parseInt(company.contract_facebook) || 0,
+      contract_instagram: parseInt(company.contract_instagram) || 0,
+      contract_google: parseInt(company.contract_google) || 0,
+      contract_blog: parseInt(company.contract_blog) || 0,
+      contract_newsletter: parseInt(company.contract_newsletter) || 0,
+      contract_details: company.contract_details || null
+    })
+    .eq('id', id)
+    .select();
+
+  if (error) {
+    throw error;
+  }
+  return data ? data[0] : null;
+}
+
+/**
+ * Met à jour les informations d'un client et ses identifiants de connexion associés.
+ */
+export async function updateClient(clientId, clientData, loginData = {}) {
+  // 1. Mise à jour de la table 'clients'
+  const { data: client, error: clientErr } = await supabase
+    .from('clients')
+    .update({
+      name: clientData.name,
+      email: clientData.email,
+      company_id: clientData.company_id || null
+    })
+    .eq('id', clientId)
+    .select();
+
+  if (clientErr) throw clientErr;
+
+  // 2. Mise à jour de la table 'app_users' (compte de connexion)
+  const appUserUpdate = {
+    name: clientData.name,
+    email: clientData.email.trim().toLowerCase()
+  };
+  if (loginData.password) {
+    appUserUpdate.password = loginData.password;
+  }
+
+  const { error: appUserErr } = await supabase
+    .from('app_users')
+    .update(appUserUpdate)
+    .eq('client_id', clientId);
+
+  if (appUserErr) throw appUserErr;
+
+  return client ? client[0] : null;
+}
+
+/**
+ * Met à jour les informations d'un collaborateur Step Up et ses identifiants associés.
+ */
+export async function updateStepupUser(stepupId, stepupData, loginData = {}) {
+  // 1. Mise à jour de la table 'stepup_users'
+  const { data: user, error: userErr } = await supabase
+    .from('stepup_users')
+    .update({
+      name: stepupData.name,
+      email: stepupData.email,
+      role: stepupData.role
+    })
+    .eq('id', stepupId)
+    .select();
+
+  if (userErr) throw userErr;
+
+  // 2. Mise à jour de la table 'app_users' (compte de connexion)
+  const appUserUpdate = {
+    name: stepupData.name,
+    email: stepupData.email.trim().toLowerCase()
+  };
+  if (loginData.password) {
+    appUserUpdate.password = loginData.password;
+  }
+
+  const { error: appUserErr } = await supabase
+    .from('app_users')
+    .update(appUserUpdate)
+    .eq('stepup_user_id', stepupId);
+
+  if (appUserErr) throw appUserErr;
+
+  return user ? user[0] : null;
+}
+
+/**
+ * Récupère l'ensemble des données de la base Supabase pour la sauvegarde.
+ */
+export async function fetchAllDatabaseData() {
+  try {
+    const [posts, companies, clients, stepupUsers, comments, appUsers] = await Promise.all([
+      supabase.from('posts').select('*'),
+      supabase.from('companies').select('*'),
+      supabase.from('clients').select('*'),
+      supabase.from('stepup_users').select('*'),
+      supabase.from('comments').select('*'),
+      supabase.from('app_users').select('*')
+    ]);
+
+    return {
+      backup_date: new Date().toISOString(),
+      posts: posts.data || [],
+      companies: companies.data || [],
+      clients: clients.data || [],
+      stepup_users: stepupUsers.data || [],
+      comments: comments.data || [],
+      app_users: appUsers.data || []
+    };
+  } catch (error) {
+    console.error("Erreur lors de la récupération de la base Supabase pour sauvegarde:", error);
+    throw error;
+  }
+}
+

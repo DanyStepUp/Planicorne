@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Header from './components/Header';
 import PlatformSelector from './components/PlatformSelector';
 import PostEditor from './components/PostEditor';
@@ -19,7 +19,8 @@ import {
   deleteCardFromDirectory,
   readCardsFromDriveCloud,
   writeCardToDriveCloud,
-  deleteCardFromDriveCloud
+  deleteCardFromDriveCloud,
+  uploadBackupToDrive
 } from './utils/driveSync';
 import { 
   fetchPosts, 
@@ -31,7 +32,8 @@ import {
   fetchClients,
   fetchStepupUsers,
   insertComment,
-  fetchCompanies
+  fetchCompanies,
+  fetchAllDatabaseData
 } from './utils/supabaseService';
 import { X, AlertCircle, FileText, Database } from 'lucide-react';
 import './App.css';
@@ -100,13 +102,40 @@ function App() {
   const [cloudAccessToken, setCloudAccessToken] = useState(localStorage.getItem('gdrive_access_token') || '');
   const [cloudFolderId, setCloudFolderId] = useState(localStorage.getItem('gdrive_folder_id') || '');
   
+  // États de sauvegarde automatique Supabase vers Google Drive
+  const [autoBackupEnabled, setAutoBackupEnabledState] = useState(() => localStorage.getItem('auto_backup_enabled') === 'true');
+  const [backupFolderId, setBackupFolderIdState] = useState(() => localStorage.getItem('auto_backup_folder_id') || '');
+  const [lastBackupTime, setLastBackupTime] = useState(() => localStorage.getItem('last_supabase_backup_time') || '');
+  const [lastBackupStatus, setLastBackupStatus] = useState(() => localStorage.getItem('last_supabase_backup_status') || '');
+
+  const setAutoBackupEnabled = (val) => {
+    setAutoBackupEnabledState(val);
+    localStorage.setItem('auto_backup_enabled', val ? 'true' : 'false');
+  };
+
+  const setBackupFolderId = (val) => {
+    setBackupFolderIdState(val);
+    localStorage.setItem('auto_backup_folder_id', val);
+  };
+  
   // Session Utilisateur
   const [currentUser, setCurrentUser] = useState(JSON.parse(localStorage.getItem('app_user_session')) || null);
 
   // États Supabase
   const [supabaseConnected, setSupabaseConnected] = useState(false);
   const [supabaseTableExists, setSupabaseTableExists] = useState(true);
-  const [hasLegacyCardsToMigrate, setHasLegacyCardsToMigrate] = useState(false);
+  const [hasLegacyCardsToMigrate, setHasLegacyCardsToMigrate] = useState(() => {
+    const localStored = localStorage.getItem('trello_cards');
+    if (localStored) {
+      try {
+        const parsed = JSON.parse(localStored);
+        return parsed && parsed.length > 0;
+      } catch (e) {
+        console.error("Erreur de parsing trello_cards:", e);
+      }
+    }
+    return false;
+  });
   const [clients, setClients] = useState([]);
   const [stepupUsers, setStepupUsers] = useState([]);
   const [companies, setCompanies] = useState([]);
@@ -145,11 +174,24 @@ function App() {
   const handleLogout = () => {
     setCurrentUser(null);
     localStorage.removeItem('app_user_session');
+    
+    // Sécurisation de session Google Drive (éviter la fuite de jetons et de données cloud)
+    localStorage.removeItem('gdrive_access_token');
+    localStorage.removeItem('gdrive_folder_id');
+    localStorage.removeItem('gdrive_cards_cache'); // Effacer le cache des posts du cloud
+    setCloudAccessToken('');
+    setCloudFolderId('');
+    
+    // Repasser en mode de stockage local par défaut
+    setSyncMode('local');
+    localStorage.setItem('sync_mode', 'local');
+    
     setEditingCardId(null);
     setContent('');
     setAttachments([]);
     setScheduledAt('');
   };
+
 
   // Vérifier la connexion Supabase
   const checkSupabaseDb = useCallback(async () => {
@@ -159,20 +201,7 @@ function App() {
     return exists;
   }, []);
 
-  // Détecter s'il y a des données locales à migrer
-  useEffect(() => {
-    const localStored = localStorage.getItem('trello_cards');
-    if (localStored) {
-      try {
-        const parsed = JSON.parse(localStored);
-        if (parsed && parsed.length > 0) {
-          setHasLegacyCardsToMigrate(true);
-        }
-      } catch (e) {
-        console.error("Erreur de parsing trello_cards:", e);
-      }
-    }
-  }, []);
+
 
   // Charger les profils (Clients, Step Up Users & Entreprises)
   const loadProfiles = useCallback(async () => {
@@ -191,8 +220,72 @@ function App() {
   }, [syncMode, supabaseConnected]);
 
   useEffect(() => {
-    loadProfiles();
+    const t = setTimeout(() => {
+      loadProfiles();
+    }, 0);
+    return () => clearTimeout(t);
   }, [loadProfiles]);
+
+  // Fonction pour déclencher une sauvegarde manuelle ou planifiée
+  const triggerSupabaseBackup = async () => {
+    if (!cloudAccessToken || !backupFolderId) {
+      console.warn("Impossible de sauvegarder : Token ou Dossier Google Drive manquant.");
+      return;
+    }
+
+    try {
+      setLastBackupStatus("Sauvegarde en cours...");
+      localStorage.setItem('last_supabase_backup_status', "Sauvegarde en cours...");
+
+      // 1. Récupération des données Supabase
+      const data = await fetchAllDatabaseData();
+
+      // 2. Génération du nom de fichier unique
+      const now = new Date();
+      const dateStr = now.toISOString().split('T')[0];
+      const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
+      const fileName = `supabase_backup_${dateStr}_${timeStr}.json`;
+
+      // 3. Téléversement vers Drive
+      await uploadBackupToDrive(cloudAccessToken, backupFolderId, data, fileName);
+
+      // 4. Succès
+      const successTime = Date.now().toString();
+      setLastBackupTime(successTime);
+      setLastBackupStatus("Sauvegarde réussie.");
+      localStorage.setItem('last_supabase_backup_time', successTime);
+      localStorage.setItem('last_supabase_backup_status', "Sauvegarde réussie.");
+    } catch (err) {
+      console.error("Échec de la sauvegarde automatique Supabase :", err);
+      const failTime = Date.now().toString();
+      setLastBackupTime(failTime);
+      setLastBackupStatus(`Erreur : ${err.message || err}`);
+      localStorage.setItem('last_supabase_backup_time', failTime);
+      localStorage.setItem('last_supabase_backup_status', `Erreur : ${err.message || err}`);
+    }
+  };
+
+  // Effect de tâche de fond pour lancer la sauvegarde horaire automatique
+  useEffect(() => {
+    if (!autoBackupEnabled || !cloudAccessToken || !backupFolderId || syncMode !== 'supabase' || !supabaseConnected) {
+      return;
+    }
+
+    const checkAndRunBackup = async () => {
+      const lastTime = localStorage.getItem('last_supabase_backup_time');
+      const shouldBackup = !lastTime || (Date.now() - parseInt(lastTime)) >= 3600000; // 1 heure (3600000 ms)
+
+      if (shouldBackup) {
+        console.log("Déclenchement automatique de la sauvegarde horaire Supabase...");
+        await triggerSupabaseBackup();
+      }
+    };
+
+    checkAndRunBackup();
+
+    const interval = setInterval(checkAndRunBackup, 60000); // Vérification chaque minute
+    return () => clearInterval(interval);
+  }, [autoBackupEnabled, cloudAccessToken, backupFolderId, syncMode, supabaseConnected]);
 
   // Effectuer la migration de LocalStorage vers Supabase
   const handleMigrateCards = async () => {
@@ -213,12 +306,13 @@ function App() {
   };
 
   // --- CHARGEMENT ET SYNCHRONISATION DES CARTES ---
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const loadCards = useCallback(async () => {
     try {
       if (syncMode === 'supabase') {
         const tableExists = await checkSupabaseDb();
         if (tableExists) {
-          let dbCards = await fetchPosts();
+          let dbCards = await fetchPosts(currentUser);
           if (currentUser?.role?.trim().toLowerCase() === 'client') {
             dbCards = dbCards.filter(card => 
               (currentUser.company_id && card.company_id === currentUser.company_id) ||
@@ -286,7 +380,7 @@ function App() {
     } catch (error) {
       console.error("Erreur lors du chargement des cartes de posts:", error);
     }
-  }, [syncMode, localDirectoryHandle, cloudAccessToken, cloudFolderId, checkSupabaseDb]);
+  }, [syncMode, localDirectoryHandle, cloudAccessToken, cloudFolderId, checkSupabaseDb, currentUser?.role, currentUser?.company_id, currentUser?.client_id]);
 
   // Déclencher le rechargement quand le mode change
   useEffect(() => {
@@ -577,9 +671,7 @@ function App() {
     }
   };
 
-  const handleAIGeneration = (generatedText) => {
-    setContent(generatedText);
-  };
+
 
   // Trouver les infos de la carte en cours de modification
   const activeEditingCard = cards.find(c => c.id === editingCardId);
@@ -634,10 +726,10 @@ function App() {
           <div className="permission-banner glass-panel animate-fade-in" style={{ borderColor: 'rgba(245, 158, 11, 0.4)', background: 'rgba(245, 158, 11, 0.05)', marginTop: '1rem' }}>
             <div className="permission-banner-text">
               <AlertCircle className="warning-icon" style={{ color: '#f59e0b' }} size={20} />
-              <span>La table <strong>posts</strong> n'existe pas encore sur Supabase. Veuillez exécuter le script SQL dans votre console Supabase.</span>
+              <span>La table <strong>posts</strong> n'existe pas encore sur Supabase. Veuillez configurer ou vérifier votre base de données Supabase.</span>
             </div>
             <button className="btn-grant-permission" style={{ backgroundColor: '#f59e0b', color: 'white' }} onClick={() => setActiveTab('settings')}>
-              Voir le script SQL
+              Aller aux paramètres
             </button>
           </div>
         )}
@@ -775,6 +867,13 @@ function App() {
             hasLegacyCardsToMigrate={hasLegacyCardsToMigrate}
             onMigrateCards={handleMigrateCards}
             checkSupabaseDb={checkSupabaseDb}
+            autoBackupEnabled={autoBackupEnabled}
+            setAutoBackupEnabled={setAutoBackupEnabled}
+            backupFolderId={backupFolderId}
+            setBackupFolderId={setBackupFolderId}
+            lastBackupTime={lastBackupTime}
+            lastBackupStatus={lastBackupStatus}
+            onTriggerBackup={triggerSupabaseBackup}
           />
         )}
           </>
@@ -782,17 +881,19 @@ function App() {
       </main>
 
       {/* MODAL D'ENREGISTREMENT */}
-      <SaveCardModal 
-        isOpen={isSaveModalOpen}
-        onClose={() => setIsSaveModalOpen(false)}
-        onSave={handleSaveCard}
-        initialTitle={activeEditingCard ? activeEditingCard.title : (content ? content.split('\n')[0].substring(0, 30) : '')}
-        initialColumn={activeEditingCard ? activeEditingCard.status : 'draft'}
-        initialScheduledAt={activeEditingCard ? activeEditingCard.scheduledAt : ''}
-        initialCompanyId={activeEditingCard ? activeEditingCard.company_id : ''}
-        companies={companies}
-        isUpdate={!!editingCardId}
-      />
+      {isSaveModalOpen && (
+        <SaveCardModal 
+          isOpen={isSaveModalOpen}
+          onClose={() => setIsSaveModalOpen(false)}
+          onSave={handleSaveCard}
+          initialTitle={activeEditingCard ? activeEditingCard.title : (content ? content.split('\n')[0].substring(0, 30) : '')}
+          initialColumn={activeEditingCard ? activeEditingCard.status : 'draft'}
+          initialScheduledAt={activeEditingCard ? activeEditingCard.scheduledAt : ''}
+          initialCompanyId={activeEditingCard ? activeEditingCard.company_id : ''}
+          companies={companies}
+          isUpdate={!!editingCardId}
+        />
+      )}
     </div>
   );
 }

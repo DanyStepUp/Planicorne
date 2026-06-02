@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Copy, CheckCircle2, Columns, Save, XCircle } from 'lucide-react';
 import './ActionPanel.css';
 

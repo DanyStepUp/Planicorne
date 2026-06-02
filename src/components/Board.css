@@ -524,6 +524,47 @@
   top: 1.5rem;
   max-height: calc(100vh - 120px);
   overflow-y: auto;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (max-width: 992px) {
+  .board-sidebar {
+    position: relative !important;
+    top: 0 !important;
+    max-height: none !important;
+    overflow-y: visible !important;
+    margin-bottom: 0.5rem;
+    padding: 1rem;
+  }
+
+  .sidebar-header {
+    border-bottom: none !important;
+    padding-bottom: 0 !important;
+  }
+
+  .board-sidebar.expanded .sidebar-header {
+    border-bottom: 1px solid var(--surface-border) !important;
+    padding-bottom: 0.75rem !important;
+  }
+
+  .board-sidebar.collapsed .sidebar-companies-list,
+  .board-sidebar.collapsed .sidebar-divider,
+  .board-sidebar.collapsed .sidebar-kpis-panel {
+    display: none !important;
+  }
+}
+
+.sidebar-toggle-icon-mobile {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+@media (max-width: 992px) {
+  .sidebar-toggle-icon-mobile {
+    display: flex;
+  }
 }
 
 .sidebar-header {

@@ -1,21 +1,21 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { 
   Plus, 
   Building, 
   User, 
   Users, 
-  Key, 
-  FileText, 
-  Mail, 
   Save, 
-  ShieldAlert, 
-  Globe 
+  ShieldAlert,
+  Edit
 } from 'lucide-react';
 import { 
   insertCompany, 
   insertClient, 
   insertStepupUser, 
-  createAppUser 
+  createAppUser,
+  updateCompany,
+  updateClient,
+  updateStepupUser
 } from '../utils/supabaseService';
 import SecureMedia from './SecureMedia';
 import './AdminPanel.css';
@@ -27,6 +27,12 @@ export default function AdminPanel({
   onRefreshData 
 }) {
   const [activeFormTab, setActiveFormTab] = useState('company'); // company, client, stepup
+  const [activeListTab, setActiveListTab] = useState('companies'); // companies, clients, stepup
+
+  // Edit states
+  const [editingCompany, setEditingCompany] = useState(null);
+  const [editingClient, setEditingClient] = useState(null);
+  const [editingStepup, setEditingStepup] = useState(null);
 
   // Form states - Company
   const [companyName, setCompanyName] = useState('');
@@ -37,6 +43,15 @@ export default function AdminPanel({
   const [contractGoogle, setContractGoogle] = useState(0);
   const [contractBlog, setContractBlog] = useState(0);
   const [contractNewsletter, setContractNewsletter] = useState(0);
+  const [contractDetails, setContractDetails] = useState({
+    linkedin: { count: 0, period: 'month' },
+    facebook: { count: 0, period: 'month' },
+    instagram: { count: 0, period: 'month' },
+    google: { count: 0, period: 'month' },
+    blog: { count: 0, period: 'month' },
+    newsletter: { count: 0, period: 'month' },
+    unquantifiable: ''
+  });
 
   // Form states - Client User
   const [clientName, setClientName] = useState('');
@@ -62,28 +77,142 @@ export default function AdminPanel({
     return url.trim(); // Return raw if no pattern matched
   };
 
-  const handleAddCompany = async (e) => {
+  const handleCancelEdit = () => {
+    setEditingCompany(null);
+    setEditingClient(null);
+    setEditingStepup(null);
+
+    // Reset company form
+    setCompanyName('');
+    setLogoUrl('');
+    setContractLinkedin(0);
+    setContractFacebook(0);
+    setContractInstagram(0);
+    setContractGoogle(0);
+    setContractBlog(0);
+    setContractNewsletter(0);
+    setContractDetails({
+      linkedin: { count: 0, period: 'month' },
+      facebook: { count: 0, period: 'month' },
+      instagram: { count: 0, period: 'month' },
+      google: { count: 0, period: 'month' },
+      blog: { count: 0, period: 'month' },
+      newsletter: { count: 0, period: 'month' },
+      unquantifiable: ''
+    });
+
+    // Reset client form
+    setClientName('');
+    setClientEmail('');
+    setClientPassword('');
+    setSelectedCompanyId('');
+
+    // Reset stepup form
+    setStepupName('');
+    setStepupEmail('');
+    setStepupPassword('');
+    setStepupRole('Rédacteur');
+  };
+
+  const handleStartEditCompany = (comp) => {
+    handleCancelEdit();
+    setEditingCompany(comp);
+    setCompanyName(comp.name);
+    setLogoUrl(comp.logo_drive_id ? `https://drive.google.com/file/d/${comp.logo_drive_id}/view` : '');
+    
+    let details = null;
+    if (comp.contract_details) {
+      try {
+        details = typeof comp.contract_details === 'string'
+          ? JSON.parse(comp.contract_details)
+          : comp.contract_details;
+      } catch (e) {
+        console.error("Failed to parse contract_details:", e);
+      }
+    }
+
+    let unquantifiableText = '';
+    if (typeof details?.unquantifiable === 'string') {
+      unquantifiableText = details.unquantifiable;
+    } else if (details?.unquantifiable && typeof details.unquantifiable === 'object') {
+      const active = [];
+      if (details.unquantifiable.google_reviews) active.push("Gestion des avis Google My Business");
+      if (details.unquantifiable.trustpilot_reviews) active.push("Gestion des avis Trustpilot");
+      unquantifiableText = active.join(', ');
+    }
+
+    setContractDetails({
+      linkedin: details?.linkedin || { count: comp.contract_linkedin || 0, period: 'month' },
+      facebook: details?.facebook || { count: comp.contract_facebook || 0, period: 'month' },
+      instagram: details?.instagram || { count: comp.contract_instagram || 0, period: 'month' },
+      google: details?.google || { count: comp.contract_google || 0, period: 'month' },
+      blog: details?.blog || { count: comp.contract_blog || 0, period: 'month' },
+      newsletter: details?.newsletter || { count: comp.contract_newsletter || 0, period: 'month' },
+      unquantifiable: unquantifiableText
+    });
+
+    setContractLinkedin(comp.contract_linkedin || 0);
+    setContractFacebook(comp.contract_facebook || 0);
+    setContractInstagram(comp.contract_instagram || 0);
+    setContractGoogle(comp.contract_google || 0);
+    setContractBlog(comp.contract_blog || 0);
+    setContractNewsletter(comp.contract_newsletter || 0);
+    setActiveFormTab('company');
+  };
+
+  const handleStartEditClient = (client) => {
+    handleCancelEdit();
+    setEditingClient(client);
+    setClientName(client.name);
+    setClientEmail(client.email);
+    setSelectedCompanyId(client.company_id || '');
+    setActiveFormTab('client');
+  };
+
+  const handleStartEditStepup = (user) => {
+    handleCancelEdit();
+    setEditingStepup(user);
+    setStepupName(user.name);
+    setStepupEmail(user.email);
+    setStepupRole(user.role || 'Rédacteur');
+    setActiveFormTab('stepup');
+  };
+
+  const handleSaveCompany = async (e) => {
     e.preventDefault();
     if (!companyName.trim()) return;
     setLoading(true);
 
     const driveId = extractDriveId(logoUrl);
-    const companyId = 'comp-' + Date.now();
+
+    const companyData = {
+      name: companyName.trim(),
+      logo_drive_id: driveId || null,
+      contract_linkedin: parseInt(contractDetails.linkedin.count) || 0,
+      contract_facebook: parseInt(contractDetails.facebook.count) || 0,
+      contract_instagram: parseInt(contractDetails.instagram.count) || 0,
+      contract_google: parseInt(contractDetails.google.count) || 0,
+      contract_blog: contractDetails.blog.period === 'month' ? parseInt(contractDetails.blog.count) || 0 : 0,
+      contract_newsletter: contractDetails.newsletter.period === 'month' ? parseInt(contractDetails.newsletter.count) || 0 : 0,
+      contract_details: contractDetails
+    };
 
     try {
-      await insertCompany({
-        id: companyId,
-        name: companyName.trim(),
-        logo_drive_id: driveId || null,
-        contract_linkedin: parseInt(contractLinkedin) || 0,
-        contract_facebook: parseInt(contractFacebook) || 0,
-        contract_instagram: parseInt(contractInstagram) || 0,
-        contract_google: parseInt(contractGoogle) || 0,
-        contract_blog: parseInt(contractBlog) || 0,
-        contract_newsletter: parseInt(contractNewsletter) || 0
-      });
+      if (editingCompany) {
+        await updateCompany(editingCompany.id, companyData);
 
-      alert(`L'entreprise "${companyName}" a été enregistrée avec succès !`);
+        alert(`L'entreprise "${companyName}" a été mise à jour avec succès !`);
+        setEditingCompany(null);
+      } else {
+        const companyId = 'comp-' + Date.now();
+        await insertCompany({
+          id: companyId,
+          ...companyData
+        });
+
+        alert(`L'entreprise "${companyName}" a été enregistrée avec succès !`);
+      }
+
       setCompanyName('');
       setLogoUrl('');
       setContractLinkedin(0);
@@ -92,47 +221,87 @@ export default function AdminPanel({
       setContractGoogle(0);
       setContractBlog(0);
       setContractNewsletter(0);
+      setContractDetails({
+        linkedin: { count: 0, period: 'month' },
+        facebook: { count: 0, period: 'month' },
+        instagram: { count: 0, period: 'month' },
+        google: { count: 0, period: 'month' },
+        blog: { count: 0, period: 'month' },
+        newsletter: { count: 0, period: 'month' },
+        unquantifiable: ''
+      });
       
       if (onRefreshData) await onRefreshData();
     } catch (err) {
       console.error(err);
-      alert("Erreur lors de la création de l'entreprise. Assurez-vous d'avoir exécuté la migration SQL.");
+      const errMsg = err?.message || '';
+      if (errMsg.includes('contract_') || errMsg.includes('logo_drive_id') || errMsg.includes('column') || err?.code === '42703') {
+        alert(
+          "Erreur lors de l'enregistrement de l'entreprise. Des colonnes de configuration de contrat ou de logo sont manquantes dans la table 'companies' de votre base de données Supabase.\n\n" +
+          "Pour corriger ce problème, veuillez exécuter le script de migration SQL suivant dans le SQL Editor de Supabase :\n\n" +
+          "ALTER TABLE public.companies \n" +
+          "ADD COLUMN IF NOT EXISTS logo_drive_id TEXT,\n" +
+          "ADD COLUMN IF NOT EXISTS contract_linkedin INTEGER DEFAULT 0,\n" +
+          "ADD COLUMN IF NOT EXISTS contract_facebook INTEGER DEFAULT 0,\n" +
+          "ADD COLUMN IF NOT EXISTS contract_instagram INTEGER DEFAULT 0,\n" +
+          "ADD COLUMN IF NOT EXISTS contract_google INTEGER DEFAULT 0,\n" +
+          "ADD COLUMN IF NOT EXISTS contract_blog INTEGER DEFAULT 0,\n" +
+          "ADD COLUMN IF NOT EXISTS contract_newsletter INTEGER DEFAULT 0,\n" +
+          "ADD COLUMN IF NOT EXISTS contract_details JSONB;"
+        );
+      } else {
+        alert("Erreur lors de l'enregistrement de l'entreprise. Assurez-vous d'avoir exécuté la migration SQL.");
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAddClient = async (e) => {
+  const handleSaveClient = async (e) => {
     e.preventDefault();
-    if (!clientName.trim() || !clientEmail.trim() || !clientPassword.trim() || !selectedCompanyId) {
-      alert("Veuillez remplir tous les champs et sélectionner une entreprise.");
+    if (!clientName.trim() || !clientEmail.trim() || (!editingClient && !clientPassword.trim()) || !selectedCompanyId) {
+      alert("Veuillez remplir les champs requis et sélectionner une entreprise.");
       return;
     }
     setLoading(true);
 
-    const clientId = 'client-' + Date.now();
-    const appUserId = 'app-user-' + Date.now();
-
     try {
-      // 1. Create client profile
-      await insertClient({
-        id: clientId,
-        name: clientName.trim(),
-        email: clientEmail.trim(),
-        company_id: selectedCompanyId
-      });
+      if (editingClient) {
+        await updateClient(editingClient.id, {
+          name: clientName.trim(),
+          email: clientEmail.trim(),
+          company_id: selectedCompanyId
+        }, {
+          password: clientPassword.trim() || undefined
+        });
 
-      // 2. Create login account
-      await createAppUser({
-        id: appUserId,
-        email: clientEmail.trim().toLowerCase(),
-        password: clientPassword.trim(),
-        name: clientName.trim(),
-        role: 'client',
-        client_id: clientId
-      });
+        alert(`L'accès client de "${clientName}" a été mis à jour avec succès !`);
+        setEditingClient(null);
+      } else {
+        const clientId = 'client-' + Date.now();
+        const appUserId = 'app-user-' + Date.now();
 
-      alert(`L'utilisateur client "${clientName}" a été créé et lié avec succès !`);
+        // 1. Create client profile
+        await insertClient({
+          id: clientId,
+          name: clientName.trim(),
+          email: clientEmail.trim(),
+          company_id: selectedCompanyId
+        });
+
+        // 2. Create login account
+        await createAppUser({
+          id: appUserId,
+          email: clientEmail.trim().toLowerCase(),
+          password: clientPassword.trim(),
+          name: clientName.trim(),
+          role: 'client',
+          client_id: clientId
+        });
+
+        alert(`L'utilisateur client "${clientName}" a été créé et lié avec succès !`);
+      }
+
       setClientName('');
       setClientEmail('');
       setClientPassword('');
@@ -141,43 +310,57 @@ export default function AdminPanel({
       if (onRefreshData) await onRefreshData();
     } catch (err) {
       console.error(err);
-      alert("Erreur lors de la création du compte client.");
+      alert("Erreur lors de l'enregistrement du compte client.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAddStepupUser = async (e) => {
+  const handleSaveStepupUser = async (e) => {
     e.preventDefault();
-    if (!stepupName.trim() || !stepupEmail.trim() || !stepupPassword.trim()) {
-      alert("Veuillez remplir tous les champs.");
+    if (!stepupName.trim() || !stepupEmail.trim() || (!editingStepup && !stepupPassword.trim())) {
+      alert("Veuillez remplir tous les champs requis.");
       return;
     }
     setLoading(true);
 
-    const stepupUserId = 'user-' + Date.now();
-    const appUserId = 'app-user-' + Date.now();
-
     try {
-      // 1. Create Step Up profile
-      await insertStepupUser({
-        id: stepupUserId,
-        name: stepupName.trim(),
-        email: stepupEmail.trim(),
-        role: stepupRole
-      });
+      if (editingStepup) {
+        await updateStepupUser(editingStepup.id, {
+          name: stepupName.trim(),
+          email: stepupEmail.trim(),
+          role: stepupRole
+        }, {
+          password: stepupPassword.trim() || undefined
+        });
 
-      // 2. Create login account
-      await createAppUser({
-        id: appUserId,
-        email: stepupEmail.trim().toLowerCase(),
-        password: stepupPassword.trim(),
-        name: stepupName.trim(),
-        role: 'stepup_user',
-        stepup_user_id: stepupUserId
-      });
+        alert(`Le collaborateur Step Up "${stepupName}" a été mis à jour avec succès !`);
+        setEditingStepup(null);
+      } else {
+        const stepupUserId = 'user-' + Date.now();
+        const appUserId = 'app-user-' + Date.now();
 
-      alert(`Le collaborateur Step Up "${stepupName}" a été ajouté avec succès !`);
+        // 1. Create Step Up profile
+        await insertStepupUser({
+          id: stepupUserId,
+          name: stepupName.trim(),
+          email: stepupEmail.trim(),
+          role: stepupRole
+        });
+
+        // 2. Create login account
+        await createAppUser({
+          id: appUserId,
+          email: stepupEmail.trim().toLowerCase(),
+          password: stepupPassword.trim(),
+          name: stepupName.trim(),
+          role: 'stepup_user',
+          stepup_user_id: stepupUserId
+        });
+
+        alert(`Le collaborateur Step Up "${stepupName}" a été ajouté avec succès !`);
+      }
+
       setStepupName('');
       setStepupEmail('');
       setStepupPassword('');
@@ -186,7 +369,7 @@ export default function AdminPanel({
       if (onRefreshData) await onRefreshData();
     } catch (err) {
       console.error(err);
-      alert("Erreur lors de la création du collaborateur Step Up.");
+      alert("Erreur lors de l'enregistrement du collaborateur Step Up.");
     } finally {
       setLoading(false);
     }
@@ -203,12 +386,13 @@ export default function AdminPanel({
       </div>
 
       <div className="admin-layout">
-        {/* COLONNE GAUCHE - FORMULAIRES DE CRÉATION */}
+        {/* COLONNE GAUCHE - FORMULAIRES DE CRÉATION/MODIFICATION */}
         <div className="admin-forms-column glass-panel">
           <div className="admin-tab-nav">
             <button 
               className={`admin-tab-btn ${activeFormTab === 'company' ? 'active' : ''}`}
               onClick={() => setActiveFormTab('company')}
+              disabled={!!editingCompany || !!editingClient || !!editingStepup}
             >
               <Building size={16} />
               <span>Entreprise & Contrat</span>
@@ -216,6 +400,7 @@ export default function AdminPanel({
             <button 
               className={`admin-tab-btn ${activeFormTab === 'client' ? 'active' : ''}`}
               onClick={() => setActiveFormTab('client')}
+              disabled={!!editingCompany || !!editingClient || !!editingStepup}
             >
               <User size={16} />
               <span>Utilisateur Client</span>
@@ -223,6 +408,7 @@ export default function AdminPanel({
             <button 
               className={`admin-tab-btn ${activeFormTab === 'stepup' ? 'active' : ''}`}
               onClick={() => setActiveFormTab('stepup')}
+              disabled={!!editingCompany || !!editingClient || !!editingStepup}
             >
               <Users size={16} />
               <span>Membre Step Up</span>
@@ -230,10 +416,10 @@ export default function AdminPanel({
           </div>
 
           <div className="admin-tab-body">
-            {/* FORMULAIRE 1 : AJOUT ENTREPRISE & CONTRAT */}
+            {/* FORMULAIRE 1 : AJOUT/ÉDITION ENTREPRISE & CONTRAT */}
             {activeFormTab === 'company' && (
-              <form onSubmit={handleAddCompany} className="admin-form animate-fade-in">
-                <h3>Nouvelle Entreprise</h3>
+              <form onSubmit={handleSaveCompany} className="admin-form animate-fade-in">
+                <h3>{editingCompany ? `Modifier l'Entreprise : ${editingCompany.name}` : 'Nouvelle Entreprise'}</h3>
                 
                 <div className="form-group">
                   <label>Nom de l'entreprise</label>
@@ -257,76 +443,152 @@ export default function AdminPanel({
                   <span className="form-hint">Le logo sera extrait et chargé dynamiquement sans surcharger la base de données.</span>
                 </div>
 
-                <div className="contract-grid-title">Nombre de publications mensuelles par canal :</div>
+                <div className="contract-grid-title">Détails de production & Fréquence par canal :</div>
                 
                 <div className="contract-inputs-grid">
                   <div className="form-group">
-                    <label>LinkedIn</label>
+                    <label>LinkedIn (mensuel)</label>
                     <input 
                       type="number" 
                       min="0" 
-                      value={contractLinkedin} 
-                      onChange={(e) => setContractLinkedin(e.target.value)} 
+                      value={contractDetails.linkedin.count} 
+                      onChange={(e) => setContractDetails(prev => ({
+                        ...prev,
+                        linkedin: { ...prev.linkedin, count: parseInt(e.target.value) || 0 }
+                      }))} 
                     />
                   </div>
+
                   <div className="form-group">
-                    <label>Facebook</label>
+                    <label>Facebook (mensuel)</label>
                     <input 
                       type="number" 
                       min="0" 
-                      value={contractFacebook} 
-                      onChange={(e) => setContractFacebook(e.target.value)} 
+                      value={contractDetails.facebook.count} 
+                      onChange={(e) => setContractDetails(prev => ({
+                        ...prev,
+                        facebook: { ...prev.facebook, count: parseInt(e.target.value) || 0 }
+                      }))} 
                     />
                   </div>
+
                   <div className="form-group">
-                    <label>Instagram</label>
+                    <label>Instagram (mensuel)</label>
                     <input 
                       type="number" 
                       min="0" 
-                      value={contractInstagram} 
-                      onChange={(e) => setContractInstagram(e.target.value)} 
+                      value={contractDetails.instagram.count} 
+                      onChange={(e) => setContractDetails(prev => ({
+                        ...prev,
+                        instagram: { ...prev.instagram, count: parseInt(e.target.value) || 0 }
+                      }))} 
                     />
                   </div>
+
                   <div className="form-group">
-                    <label>Google Business</label>
+                    <label>Google Business (mensuel)</label>
                     <input 
                       type="number" 
                       min="0" 
-                      value={contractGoogle} 
-                      onChange={(e) => setContractGoogle(e.target.value)} 
+                      value={contractDetails.google.count} 
+                      onChange={(e) => setContractDetails(prev => ({
+                        ...prev,
+                        google: { ...prev.google, count: parseInt(e.target.value) || 0 }
+                      }))} 
                     />
                   </div>
+
                   <div className="form-group">
-                    <label>Billet de Blog</label>
-                    <input 
-                      type="number" 
-                      min="0" 
-                      value={contractBlog} 
-                      onChange={(e) => setContractBlog(e.target.value)} 
-                    />
+                    <label>Billet de Blog (flexible)</label>
+                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                      <input 
+                        type="number" 
+                        min="0" 
+                        value={contractDetails.blog.count} 
+                        onChange={(e) => setContractDetails(prev => ({
+                          ...prev,
+                          blog: { ...prev.blog, count: parseInt(e.target.value) || 0 }
+                        }))} 
+                        style={{ width: '70px', flex: '0 0 70px' }}
+                      />
+                      <select
+                        value={contractDetails.blog.period}
+                        onChange={(e) => setContractDetails(prev => ({
+                          ...prev,
+                          blog: { ...prev.blog, period: e.target.value }
+                        }))}
+                        style={{ flex: 1, minWidth: '120px', padding: '0.4rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--surface-border)', background: 'var(--surface-color)', color: 'var(--text-main)' }}
+                      >
+                        <option value="month">par mois</option>
+                        <option value="2_months">par 2 mois</option>
+                        <option value="3_months">par 3 mois</option>
+                      </select>
+                    </div>
                   </div>
+
                   <div className="form-group">
-                    <label>Newsletter</label>
-                    <input 
-                      type="number" 
-                      min="0" 
-                      value={contractNewsletter} 
-                      onChange={(e) => setContractNewsletter(e.target.value)} 
-                    />
+                    <label>Newsletter (flexible)</label>
+                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                      <input 
+                        type="number" 
+                        min="0" 
+                        value={contractDetails.newsletter.count} 
+                        onChange={(e) => setContractDetails(prev => ({
+                          ...prev,
+                          newsletter: { ...prev.newsletter, count: parseInt(e.target.value) || 0 }
+                        }))} 
+                        style={{ width: '70px', flex: '0 0 70px' }}
+                      />
+                      <select
+                        value={contractDetails.newsletter.period}
+                        onChange={(e) => setContractDetails(prev => ({
+                          ...prev,
+                          newsletter: { ...prev.newsletter, period: e.target.value }
+                        }))}
+                        style={{ flex: 1, minWidth: '120px', padding: '0.4rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--surface-border)', background: 'var(--surface-color)', color: 'var(--text-main)' }}
+                      >
+                        <option value="month">par mois</option>
+                        <option value="2_months">par 2 mois</option>
+                        <option value="3_months">par 3 mois</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 
-                <button type="submit" className="btn btn-primary-admin" disabled={loading || !companyName.trim()}>
-                  <Save size={18} />
-                  <span>Enregistrer l'entreprise</span>
-                </button>
+                <div className="form-group" style={{ marginTop: '1.25rem', marginBottom: '1.25rem' }}>
+                  <label htmlFor="company-unquantifiable">Contrats non quantifiables (Optionnel)</label>
+                  <input 
+                    id="company-unquantifiable"
+                    type="text" 
+                    placeholder="Ex: Gestion des avis Google My Business, Trustpilot, etc."
+                    value={contractDetails.unquantifiable || ''}
+                    onChange={(e) => setContractDetails(prev => ({
+                      ...prev,
+                      unquantifiable: e.target.value
+                    }))}
+                    style={{ padding: '0.6rem 0.85rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--surface-border)', background: 'rgba(255,255,255,0.02)', color: 'var(--text-main)', width: '100%', boxSizing: 'border-box' }}
+                  />
+                  <span className="form-hint" style={{ display: 'block', marginTop: '0.25rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Saisissez le détail textuel des contrats non mesurables.</span>
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <button type="submit" className="btn btn-primary-admin" style={{ flex: 1 }} disabled={loading || !companyName.trim()}>
+                    <Save size={18} />
+                    <span>{editingCompany ? "Mettre à jour" : "Enregistrer l'entreprise"}</span>
+                  </button>
+                  {editingCompany && (
+                    <button type="button" className="btn btn-secondary-admin" style={{ flex: '0 0 auto', marginTop: '1rem', padding: '0.75rem', borderRadius: 'var(--radius-md)', fontWeight: 600, cursor: 'pointer', border: '1px solid var(--surface-border)', background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)' }} onClick={handleCancelEdit}>
+                      Annuler
+                    </button>
+                  )}
+                </div>
               </form>
             )}
 
-            {/* FORMULAIRE 2 : AJOUT UTILISATEUR CLIENT */}
+            {/* FORMULAIRE 2 : AJOUT/ÉDITION UTILISATEUR CLIENT */}
             {activeFormTab === 'client' && (
-              <form onSubmit={handleAddClient} className="admin-form animate-fade-in">
-                <h3>Créer un accès Client</h3>
+              <form onSubmit={handleSaveClient} className="admin-form animate-fade-in">
+                <h3>{editingClient ? `Modifier l'Accès Client : ${editingClient.name}` : 'Créer un accès Client'}</h3>
 
                 <div className="form-group">
                   <label>Entreprise rattachée</label>
@@ -365,27 +627,34 @@ export default function AdminPanel({
                 </div>
 
                 <div className="form-group">
-                  <label>Mot de passe</label>
+                  <label>Mot de passe {editingClient && <span style={{ fontWeight: 'normal', color: 'var(--text-muted)', fontSize: '0.8rem' }}>(Laisser vide si inchangé)</span>}</label>
                   <input 
                     type="password" 
-                    placeholder="Créer un mot de passe d'accès..."
+                    placeholder={editingClient ? "Saisir un nouveau mot de passe..." : "Créer un mot de passe d'accès..."}
                     value={clientPassword}
                     onChange={(e) => setClientPassword(e.target.value)}
-                    required
+                    required={!editingClient}
                   />
                 </div>
 
-                <button type="submit" className="btn btn-primary-admin" disabled={loading || !selectedCompanyId}>
-                  <Plus size={18} />
-                  <span>Créer le compte Client</span>
-                </button>
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <button type="submit" className="btn btn-primary-admin" style={{ flex: 1 }} disabled={loading || !selectedCompanyId}>
+                    {editingClient ? <Save size={18} /> : <Plus size={18} />}
+                    <span>{editingClient ? "Mettre à jour" : "Créer le compte Client"}</span>
+                  </button>
+                  {editingClient && (
+                    <button type="button" className="btn btn-secondary-admin" style={{ flex: '0 0 auto', marginTop: '1rem', padding: '0.75rem', borderRadius: 'var(--radius-md)', fontWeight: 600, cursor: 'pointer', border: '1px solid var(--surface-border)', background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)' }} onClick={handleCancelEdit}>
+                      Annuler
+                    </button>
+                  )}
+                </div>
               </form>
             )}
 
-            {/* FORMULAIRE 3 : AJOUT MEMBRE STEP UP */}
+            {/* FORMULAIRE 3 : AJOUT/ÉDITION MEMBRE STEP UP */}
             {activeFormTab === 'stepup' && (
-              <form onSubmit={handleAddStepupUser} className="admin-form animate-fade-in">
-                <h3>Ajouter un collaborateur Step Up</h3>
+              <form onSubmit={handleSaveStepupUser} className="admin-form animate-fade-in">
+                <h3>{editingStepup ? `Modifier le Collaborateur : ${editingStepup.name}` : 'Ajouter un collaborateur Step Up'}</h3>
 
                 <div className="form-group">
                   <label>Nom complet</label>
@@ -421,77 +690,219 @@ export default function AdminPanel({
                 </div>
 
                 <div className="form-group">
-                  <label>Mot de passe</label>
+                  <label>Mot de passe {editingStepup && <span style={{ fontWeight: 'normal', color: 'var(--text-muted)', fontSize: '0.8rem' }}>(Laisser vide si inchangé)</span>}</label>
                   <input 
                     type="password" 
-                    placeholder="Mot de passe provisoire..."
+                    placeholder={editingStepup ? "Saisir un nouveau mot de passe..." : "Mot de passe provisoire..."}
                     value={stepupPassword}
                     onChange={(e) => setStepupPassword(e.target.value)}
-                    required
+                    required={!editingStepup}
                   />
                 </div>
 
-                <button type="submit" className="btn btn-primary-admin" disabled={loading}>
-                  <Plus size={18} />
-                  <span>Enregistrer le collaborateur</span>
-                </button>
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <button type="submit" className="btn btn-primary-admin" style={{ flex: 1 }} disabled={loading}>
+                    {editingStepup ? <Save size={18} /> : <Plus size={18} />}
+                    <span>{editingStepup ? "Mettre à jour" : "Enregistrer le collaborateur"}</span>
+                  </button>
+                  {editingStepup && (
+                    <button type="button" className="btn btn-secondary-admin" style={{ flex: '0 0 auto', marginTop: '1rem', padding: '0.75rem', borderRadius: 'var(--radius-md)', fontWeight: 600, cursor: 'pointer', border: '1px solid var(--surface-border)', background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)' }} onClick={handleCancelEdit}>
+                      Annuler
+                    </button>
+                  )}
+                </div>
               </form>
             )}
           </div>
         </div>
 
-        {/* COLONNE DROITE - LISTE DES ENTREPRISES ET CONTRATS EN COURS */}
+        {/* COLONNE DROITE - LISTE DE TOUTES LES ENTITÉS SÉLECTIONNABLES */}
         <div className="admin-list-column glass-panel">
-          <h3>Entreprises actives ({companies.length})</h3>
+          <div className="admin-tab-nav" style={{ marginBottom: '1.25rem' }}>
+            <button 
+              className={`admin-tab-btn ${activeListTab === 'companies' ? 'active' : ''}`}
+              onClick={() => setActiveListTab('companies')}
+              style={{ padding: '0.75rem 0.25rem' }}
+            >
+              <Building size={15} />
+              <span style={{ fontSize: '0.8rem' }}>Entreprises ({companies.length})</span>
+            </button>
+            <button 
+              className={`admin-tab-btn ${activeListTab === 'clients' ? 'active' : ''}`}
+              onClick={() => setActiveListTab('clients')}
+              style={{ padding: '0.75rem 0.25rem' }}
+            >
+              <User size={15} />
+              <span style={{ fontSize: '0.8rem' }}>Clients ({clients.length})</span>
+            </button>
+            <button 
+              className={`admin-tab-btn ${activeListTab === 'stepup' ? 'active' : ''}`}
+              onClick={() => setActiveListTab('stepup')}
+              style={{ padding: '0.75rem 0.25rem' }}
+            >
+              <Users size={15} />
+              <span style={{ fontSize: '0.8rem' }}>Membres ({stepupUsers.length})</span>
+            </button>
+          </div>
           
-          <div className="admin-companies-table-wrapper">
-            {companies.length > 0 ? (
-              <table className="admin-companies-table">
-                <thead>
-                  <tr>
-                    <th>Logo</th>
-                    <th>Nom de l'entreprise</th>
-                    <th>Contrat (Mensuel)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {companies.map(comp => (
-                    <tr key={comp.id}>
-                      <td className="company-logo-cell">
-                        {comp.logo_drive_id ? (
-                          <div className="admin-logo-wrapper">
-                            <SecureMedia 
-                              driveId={comp.logo_drive_id} 
-                              type="image/png" 
-                              alt="Logo" 
-                            />
-                          </div>
-                        ) : (
-                          <div className="admin-logo-fallback">🏢</div>
-                        )}
-                      </td>
-                      <td className="company-name-cell">
-                        <strong>{comp.name}</strong>
-                      </td>
-                      <td className="company-contract-cell">
-                        <div className="contract-badge-grid">
-                          {comp.contract_linkedin > 0 && <span className="c-badge badge-ln">LI: {comp.contract_linkedin}</span>}
-                          {comp.contract_facebook > 0 && <span className="c-badge badge-fb">FB: {comp.contract_facebook}</span>}
-                          {comp.contract_instagram > 0 && <span className="c-badge badge-ig">IG: {comp.contract_instagram}</span>}
-                          {comp.contract_google > 0 && <span className="c-badge badge-g">GMB: {comp.contract_google}</span>}
-                          {comp.contract_blog > 0 && <span className="c-badge badge-blog">Blog: {comp.contract_blog}</span>}
-                          {comp.contract_newsletter > 0 && <span className="c-badge badge-mail">Mail: {comp.contract_newsletter}</span>}
-                        </div>
-                      </td>
+          <div className="admin-companies-table-wrapper" style={{ border: 'none' }}>
+            {/* LISTE 1 : ENTREPRISES */}
+            {activeListTab === 'companies' && (
+              companies.length > 0 ? (
+                <table className="admin-companies-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '45px' }}>Logo</th>
+                      <th>Entreprise</th>
+                      <th>Contrat (Mensuel)</th>
+                      <th style={{ width: '50px', textAlign: 'center' }}>Modifier</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <div className="admin-empty-state">
-                <Building size={48} style={{ opacity: 0.15, marginBottom: '1rem' }} />
-                <p>Aucune entreprise cliente enregistrée pour le moment.</p>
-              </div>
+                  </thead>
+                  <tbody>
+                    {companies.map(comp => (
+                      <tr key={comp.id}>
+                        <td className="company-logo-cell">
+                          {comp.logo_drive_id ? (
+                            <div className="admin-logo-wrapper">
+                              <SecureMedia 
+                                driveId={comp.logo_drive_id} 
+                                type="image/png" 
+                                alt="Logo" 
+                              />
+                            </div>
+                          ) : (
+                            <div className="admin-logo-fallback">🏢</div>
+                          )}
+                        </td>
+                        <td className="company-name-cell">
+                          <strong>{comp.name}</strong>
+                        </td>
+                        <td className="company-contract-cell">
+                          <div className="contract-badge-grid">
+                            {comp.contract_linkedin > 0 && <span className="c-badge badge-ln">LI: {comp.contract_linkedin}</span>}
+                            {comp.contract_facebook > 0 && <span className="c-badge badge-fb">FB: {comp.contract_facebook}</span>}
+                            {comp.contract_instagram > 0 && <span className="c-badge badge-ig">IG: {comp.contract_instagram}</span>}
+                            {comp.contract_google > 0 && <span className="c-badge badge-g">GMB: {comp.contract_google}</span>}
+                            {comp.contract_blog > 0 && <span className="c-badge badge-blog">Blog: {comp.contract_blog}</span>}
+                            {comp.contract_newsletter > 0 && <span className="c-badge badge-mail">Mail: {comp.contract_newsletter}</span>}
+                          </div>
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <button 
+                            type="button"
+                            className="btn-option" 
+                            style={{ padding: '0.4rem', background: 'rgba(25, 140, 204, 0.1)', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'var(--primary-color)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                            onClick={() => handleStartEditCompany(comp)}
+                          >
+                            <Edit size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="admin-empty-state">
+                  <Building size={48} style={{ opacity: 0.15, marginBottom: '1rem' }} />
+                  <p>Aucune entreprise cliente enregistrée.</p>
+                </div>
+              )
+            )}
+
+            {/* LISTE 2 : UTILISATEURS CLIENTS */}
+            {activeListTab === 'clients' && (
+              clients.length > 0 ? (
+                <table className="admin-companies-table">
+                  <thead>
+                    <tr>
+                      <th>Nom complet</th>
+                      <th>Adresse e-mail</th>
+                      <th>Rattachement</th>
+                      <th style={{ width: '50px', textAlign: 'center' }}>Modifier</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clients.map(client => (
+                      <tr key={client.id}>
+                        <td className="company-name-cell">
+                          <strong>{client.name}</strong>
+                        </td>
+                        <td style={{ color: 'var(--text-muted)' }}>{client.email}</td>
+                        <td>
+                          {client.companies ? (
+                            <span style={{ color: 'var(--primary-color)', fontWeight: 600 }}>
+                              🏢 {client.companies.name}
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)' }}>Non rattachée</span>
+                          )}
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <button 
+                            type="button"
+                            className="btn-option" 
+                            style={{ padding: '0.4rem', background: 'rgba(25, 140, 204, 0.1)', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'var(--primary-color)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                            onClick={() => handleStartEditClient(client)}
+                          >
+                            <Edit size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="admin-empty-state">
+                  <User size={48} style={{ opacity: 0.15, marginBottom: '1rem' }} />
+                  <p>Aucun utilisateur client enregistré.</p>
+                </div>
+              )
+            )}
+
+            {/* LISTE 3 : MEMBRES STEP UP */}
+            {activeListTab === 'stepup' && (
+              stepupUsers.length > 0 ? (
+                <table className="admin-companies-table">
+                  <thead>
+                    <tr>
+                      <th>Nom complet</th>
+                      <th>Adresse e-mail</th>
+                      <th>Rôle interne</th>
+                      <th style={{ width: '50px', textAlign: 'center' }}>Modifier</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stepupUsers.map(user => (
+                      <tr key={user.id}>
+                        <td className="company-name-cell">
+                          <strong>{user.name}</strong>
+                        </td>
+                        <td style={{ color: 'var(--text-muted)' }}>{user.email}</td>
+                        <td>
+                          <span style={{ background: 'rgba(255,255,255,0.06)', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600 }}>
+                            {user.role}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <button 
+                            type="button"
+                            className="btn-option" 
+                            style={{ padding: '0.4rem', background: 'rgba(25, 140, 204, 0.1)', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'var(--primary-color)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                            onClick={() => handleStartEditStepup(user)}
+                          >
+                            <Edit size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="admin-empty-state">
+                  <Users size={48} style={{ opacity: 0.15, marginBottom: '1rem' }} />
+                  <p>Aucun collaborateur Step Up enregistré.</p>
+                </div>
+              )
             )}
           </div>
         </div>
