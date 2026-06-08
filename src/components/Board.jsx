@@ -63,16 +63,24 @@ const PLATFORM_LABELS = {
 export default function Board({
   cards = [],
   companies = [],
+  stepupUsers = [],
   onMoveCard,
   onDeleteCard,
   onEditCard,
-  onAddCardDirectly,
+  onAddCard,
   onUpdateCardDate,
   currentUser
 }) {
+  const isClient = currentUser?.role?.trim().toLowerCase() === 'client';
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPlatformFilter, setSelectedPlatformFilter] = useState('all');
-  const [selectedCompanyFilter, setSelectedCompanyFilter] = useState('all');
+  const [selectedCompanyFilter, setSelectedCompanyFilter] = useState(() => {
+    if (isClient && currentUser?.company_id) {
+      return currentUser.company_id;
+    }
+    return 'all';
+  });
   const [draggedOverColumn, setDraggedOverColumn] = useState(null);
   const [copiedCardId, setCopiedCardId] = useState(null);
   const [activeMenuCardId, setActiveMenuCardId] = useState(null);
@@ -80,12 +88,15 @@ export default function Board({
 
   // Set default company filter to first company when companies load
   useEffect(() => {
+    if (isClient) return;
     if (selectedCompanyFilter === 'all' && companies.length > 0) {
-      setSelectedCompanyFilter(companies[0].id);
+      const t = setTimeout(() => {
+        setSelectedCompanyFilter(companies[0].id);
+      }, 0);
+      return () => clearTimeout(t);
     }
-  }, [companies, selectedCompanyFilter]);
+  }, [companies, selectedCompanyFilter, isClient]);
 
-  const isClient = currentUser?.role?.trim().toLowerCase() === 'client';
   const activeColumns = isClient
     ? COLUMNS.filter(col => col.id === 'validate')
     : COLUMNS;
@@ -122,6 +133,7 @@ export default function Board({
       card.platform === selectedPlatformFilter;
 
     const matchesCompany =
+      isClient ||
       selectedCompanyFilter === 'all' ||
       card.company_id === selectedCompanyFilter;
 
@@ -189,18 +201,9 @@ export default function Board({
   // --- ENREGISTRER UNE NOUVELLE CARTE RAPIDE ---
   const handleQuickAdd = (columnId) => {
     if (isClient) return;
-    const title = prompt("Saisissez le titre de votre post :");
-    if (!title || !title.trim()) return;
-
-    // Plateforme par défaut : linkedin
-    onAddCardDirectly({
-      title: title.trim(),
-      content: "",
-      platform: 'linkedin',
+    onAddCard({
       status: columnId,
-      company_id: selectedCompanyFilter !== 'all' ? selectedCompanyFilter : (companies.length > 0 ? companies[0].id : null),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      company_id: selectedCompanyFilter !== 'all' ? selectedCompanyFilter : (companies.length > 0 ? companies[0].id : '')
     });
   };
 
@@ -227,7 +230,7 @@ export default function Board({
       { key: 'blog', label: 'Billet de Blog', color: '#6366f1' },
       { key: 'newsletter', label: 'Newsletter', color: '#10b981' }
     ].map(p => {
-      let target = 0;
+      let target;
       let labelSuffix = '';
       if (details?.frequencies?.[p.key]) {
         const freq = details.frequencies[p.key];
@@ -326,6 +329,37 @@ export default function Board({
 
   const kpis = getCompanyKPIs(selectedCompanyFilter);
 
+  const renderStepupMembersList = (companyId) => {
+    if (!companyId) return null;
+    const assignedMembers = stepupUsers.filter(user => 
+      user.company_ids && user.company_ids.includes(companyId)
+    );
+
+    if (assignedMembers.length === 0) {
+      return (
+        <div className="stepup-members-empty" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+          Aucun collaborateur Step Up assigné à cette entreprise.
+        </div>
+      );
+    }
+
+    return (
+      <div className="stepup-members-list-container" style={{ marginTop: '0.75rem', borderTop: '1px dashed var(--surface-border)', paddingTop: '0.75rem' }}>
+        <span style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '0.4rem', textAlign: 'left' }}>
+          Membres Step Up assignés :
+        </span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+          {assignedMembers.map(m => (
+            <div key={m.id} style={{ display: 'flex', flexDirection: 'column', fontSize: '0.75rem', color: 'var(--text-main)', background: 'rgba(255,255,255,0.02)', padding: '0.4rem 0.6rem', borderRadius: '4px', border: '1px solid var(--surface-border)', textAlign: 'left' }}>
+              <span style={{ fontWeight: 600 }}>{m.name} <span style={{ fontSize: '0.675rem', color: 'var(--primary-color)', marginLeft: '0.25rem', background: 'rgba(25, 140, 204, 0.08)', padding: '0.05rem 0.30rem', borderRadius: '3px' }}>{m.role}</span></span>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginTop: '0.15rem' }}>📧 {m.email}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className={`board-layout-container ${!isClient ? 'has-sidebar' : ''} animate-fade-in`}>
       {/* SIDEBAR POUR STEP UP / ADMIN */}
@@ -398,6 +432,7 @@ export default function Board({
               <div className="sidebar-contract-progress-section animate-fade-in">
                 <h4 className="sidebar-panel-title">Objectifs du Contrat</h4>
                 {renderContractProgress(selectedCompany)}
+                {renderStepupMembersList(selectedCompany.id)}
               </div>
             )}
           </div>
@@ -430,6 +465,7 @@ export default function Board({
             <div className="client-banner-right">
               <h4 className="contract-title">Suivi de vos publications ce mois</h4>
               {renderContractProgress(clientCompany)}
+              {renderStepupMembersList(clientCompany.id)}
             </div>
           </div>
         )}

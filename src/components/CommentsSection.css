@@ -131,6 +131,7 @@
 }
 
 .comment-form {
+  position: relative;
   border-top: 1px solid var(--surface-border);
   padding-top: 1rem;
   display: flex;

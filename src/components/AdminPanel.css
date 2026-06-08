@@ -293,3 +293,61 @@
   color: var(--text-muted);
   text-align: center;
 }
+
+/* Row-based platform layout */
+.contract-platforms-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-top: 0.75rem;
+}
+
+.contract-platform-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.contract-platform-row:last-child {
+  border-bottom: none;
+}
+
+.contract-platform-row label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-main);
+  flex: 0 0 150px;
+}
+
+.platform-input-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  max-width: 280px;
+  justify-content: flex-end;
+}
+
+.platform-input-group input[type="number"] {
+  width: 70px !important;
+  text-align: center !important;
+  padding: 0.45rem !important;
+  margin: 0 !important;
+}
+
+.input-period-static {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  width: 120px;
+  text-align: left;
+}
+
+.platform-input-group select {
+  padding: 0.45rem !important;
+  font-size: 0.85rem !important;
+  width: 120px !important;
+  border-radius: var(--radius-sm) !important;
+  margin: 0 !important;
+}

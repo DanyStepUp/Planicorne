@@ -2,25 +2,18 @@ import { useState, useEffect, useCallback } from 'react';
 import Header from './components/Header';
 import PlatformSelector from './components/PlatformSelector';
 import PostEditor from './components/PostEditor';
-import PostPreview from './components/PostPreview';
 import ActionPanel from './components/ActionPanel';
 import CalendarView from './components/CalendarView';
 import Board from './components/Board';
 import DriveSettings from './components/DriveSettings';
-import SaveCardModal from './components/SaveCardModal';
 import CommentsSection from './components/CommentsSection';
 import Login from './components/Login';
 import AdminPanel from './components/AdminPanel';
 import { 
-  getHandleFromDB, 
   verifyPermission, 
   readCardsFromDirectory, 
-  writeCardToDirectory, 
-  deleteCardFromDirectory,
-  readCardsFromDriveCloud,
-  writeCardToDriveCloud,
-  deleteCardFromDriveCloud,
-  uploadBackupToDrive
+  uploadBackupToDrive,
+  refreshGoogleAccessToken
 } from './utils/driveSync';
 import { 
   fetchPosts, 
@@ -33,54 +26,15 @@ import {
   fetchStepupUsers,
   insertComment,
   fetchCompanies,
-  fetchAllDatabaseData
+  fetchAllDatabaseData,
+  getSetting,
+  saveSetting,
+  refreshUserSession
 } from './utils/supabaseService';
 import { X, AlertCircle, FileText, Database } from 'lucide-react';
 import './App.css';
 
-// Posts d'exemple initiaux haut de gamme
-const INITIAL_CARDS = [
-  {
-    id: 'init-1',
-    title: 'Annonce de notre nouveau site web',
-    content: "Nous sommes ravis de vous présenter notre tout nouveau site internet ! ✨\n\nPlus moderne, plus rapide, et conçu pour vous offrir la meilleure expérience utilisateur possible.\n\nDécouvrez nos services, nos études de cas et notre blog en un clic. Lien dans la bio ! 🚀\n\n#nouveau #site #startup #digital",
-    platform: 'linkedin',
-    status: 'draft',
-    createdAt: new Date(Date.now() - 3600000 * 24).toISOString(),
-    updatedAt: new Date(Date.now() - 3600000 * 24).toISOString(),
-    scheduledAt: new Date(Date.now() + 3600000 * 24).toISOString(),
-    attachments: [
-      {
-        id: 'init-att-1',
-        name: 'nouveau-site.svg',
-        type: 'image/svg+xml',
-        size: 614,
-        data: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="400" viewBox="0 0 800 400"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%23198CCC"/><stop offset="100%" stop-color="%236366f1"/></linearGradient></defs><rect width="800" height="400" fill="url(%23g)"/><circle cx="400" cy="200" r="120" fill="white" fill-opacity="0.1"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="system-ui, sans-serif" font-size="44" font-weight="800" fill="white" letter-spacing="1.5">SITE WEB EN LIGNE ! ✨</text></svg>',
-        isCover: true
-      }
-    ]
-  },
-  {
-    id: 'init-2',
-    title: 'Recrutement : Chef de Projet Digital',
-    content: "Step Up recrute ! 🎯\n\nVous êtes passionné par le marketing digital, organisé et doté d'un excellent relationnel ? Rejoignez notre équipe en pleine croissance en tant que Chef de Projet Digital.\n\nPostulez dès aujourd'hui par email ou partagez cette opportunité à votre réseau ! 💼",
-    platform: 'facebook',
-    status: 'validate',
-    createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
-    updatedAt: new Date(Date.now() - 3600000 * 5).toISOString(),
-    scheduledAt: new Date(Date.now() + 3600000 * 48).toISOString()
-  },
-  {
-    id: 'init-3',
-    title: 'Citation inspirante - Lundi motivation',
-    content: "« La seule façon de faire du bon travail est d'aimer ce que vous faites. » - Steve Jobs 💡\n\nTrès bon début de semaine à tous ! Que vos projets se concrétisent.\n\n#lundi #motivation #citation #leadership",
-    platform: 'instagram',
-    status: 'ready',
-    createdAt: new Date(Date.now() - 3600000).toISOString(),
-    updatedAt: new Date(Date.now() - 3600000).toISOString(),
-    scheduledAt: new Date(Date.now() - 3600000 * 24).toISOString()
-  }
-];
+
 
 function App() {
   const [activeTab, setActiveTab] = useState(() => {
@@ -95,12 +49,21 @@ function App() {
   const [scheduledAt, setScheduledAt] = useState('');
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
   
-  // États de synchronisation
-  const [syncMode, setSyncMode] = useState(localStorage.getItem('sync_mode') || 'supabase');
+  // États de synchronisation (Forcé sur Supabase PostgreSQL)
+  const syncMode = 'supabase';
+  const setSyncMode = () => {};
   const [localDirectoryHandle, setLocalDirectoryHandle] = useState(null);
   const [localDirectoryName, setLocalDirectoryName] = useState('');
   const [cloudAccessToken, setCloudAccessToken] = useState(localStorage.getItem('gdrive_access_token') || '');
   const [cloudFolderId, setCloudFolderId] = useState(localStorage.getItem('gdrive_folder_id') || '');
+  const [selectedCompanyFilter, setSelectedCompanyFilter] = useState(() => {
+    const cachedUser = JSON.parse(localStorage.getItem('app_user_session'));
+    const isClient = cachedUser?.role?.trim().toLowerCase() === 'client';
+    if (isClient && cachedUser?.company_id) {
+      return cachedUser.company_id;
+    }
+    return 'all';
+  });
   
   // États de sauvegarde automatique Supabase vers Google Drive
   const [autoBackupEnabled, setAutoBackupEnabledState] = useState(() => localStorage.getItem('auto_backup_enabled') === 'true');
@@ -108,14 +71,24 @@ function App() {
   const [lastBackupTime, setLastBackupTime] = useState(() => localStorage.getItem('last_supabase_backup_time') || '');
   const [lastBackupStatus, setLastBackupStatus] = useState(() => localStorage.getItem('last_supabase_backup_status') || '');
 
-  const setAutoBackupEnabled = (val) => {
+  const setAutoBackupEnabled = async (val) => {
     setAutoBackupEnabledState(val);
     localStorage.setItem('auto_backup_enabled', val ? 'true' : 'false');
+    try {
+      await saveSetting('auto_backup_enabled', val ? 'true' : 'false');
+    } catch (e) {
+      console.error("Failed to save backup config:", e);
+    }
   };
 
-  const setBackupFolderId = (val) => {
+  const setBackupFolderId = async (val) => {
     setBackupFolderIdState(val);
     localStorage.setItem('auto_backup_folder_id', val);
+    try {
+      await saveSetting('auto_backup_folder_id', val);
+    } catch (e) {
+      console.error("Failed to save backup folder ID:", e);
+    }
   };
   
   // Session Utilisateur
@@ -146,9 +119,11 @@ function App() {
   // Pièces jointes du post en cours
   const [attachments, setAttachments] = useState([]);
   
-  // Édition bidirectionnelle et Modal de sauvegarde
-  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  // Édition bidirectionnelle (Sans pop-up)
   const [editingCardId, setEditingCardId] = useState(null);
+  const [editingTitle, setEditingTitle] = useState('');
+  const [editingCompanyId, setEditingCompanyId] = useState('');
+  const [editingStatus, setEditingStatus] = useState('draft');
   const [localPermissionNeeded, setLocalPermissionNeeded] = useState(false);
 
   // Appliquer le thème
@@ -182,14 +157,13 @@ function App() {
     setCloudAccessToken('');
     setCloudFolderId('');
     
-    // Repasser en mode de stockage local par défaut
-    setSyncMode('local');
-    localStorage.setItem('sync_mode', 'local');
-    
     setEditingCardId(null);
+    setEditingTitle('');
     setContent('');
     setAttachments([]);
     setScheduledAt('');
+    setEditingCompanyId('');
+    setEditingStatus('draft');
   };
 
 
@@ -226,8 +200,275 @@ function App() {
     return () => clearTimeout(t);
   }, [loadProfiles]);
 
+  // Rafraîchir la session de l'utilisateur connecté sur Supabase en cas de changement (ex: attribution d'une entreprise)
+  useEffect(() => {
+    const checkUserSessionFreshness = async () => {
+      if (currentUser && supabaseConnected) {
+        try {
+          const freshUser = await refreshUserSession(currentUser.id);
+          if (freshUser) {
+            if (JSON.stringify(freshUser) !== JSON.stringify(currentUser)) {
+              console.log("Mise à jour de la session utilisateur locale détectée.");
+              setCurrentUser(freshUser);
+              localStorage.setItem('app_user_session', JSON.stringify(freshUser));
+            }
+          }
+        } catch (err) {
+          console.error("Erreur lors du rafraîchissement de la session utilisateur:", err);
+        }
+      }
+    };
+    checkUserSessionFreshness();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabaseConnected]);
+
+  // Charger la configuration Google Drive depuis la table app_settings
+  useEffect(() => {
+    const loadGDriveSettings = async () => {
+      if (supabaseConnected) {
+        try {
+          const dbClientId = await getSetting('gdrive_client_id');
+          const dbApiKey = await getSetting('gdrive_api_key');
+          const dbFolderId = await getSetting('gdrive_folder_id');
+          const dbBackupFolderId = await getSetting('auto_backup_folder_id');
+          const dbAutoBackupEnabled = await getSetting('auto_backup_enabled');
+          const dbRefreshToken = await getSetting('gdrive_refresh_token');
+
+          if (dbClientId) localStorage.setItem('gdrive_client_id', dbClientId);
+          if (dbApiKey) localStorage.setItem('gdrive_api_key', dbApiKey);
+          if (dbFolderId) {
+            localStorage.setItem('gdrive_folder_id', dbFolderId);
+            setCloudFolderId(dbFolderId);
+          }
+          if (dbBackupFolderId) {
+            localStorage.setItem('auto_backup_folder_id', dbBackupFolderId);
+            setBackupFolderId(dbBackupFolderId);
+          }
+          if (dbAutoBackupEnabled) {
+            const isEnabled = dbAutoBackupEnabled === 'true';
+            localStorage.setItem('auto_backup_enabled', dbAutoBackupEnabled);
+            setAutoBackupEnabledState(isEnabled);
+          }
+
+          if (dbRefreshToken) {
+            localStorage.setItem('gdrive_refresh_token', dbRefreshToken);
+            const cId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+            const cSec = import.meta.env.VITE_GOOGLE_CLIENT_SECRET || '';
+
+            try {
+              const res = await refreshGoogleAccessToken(cId, cSec, dbRefreshToken);
+              localStorage.setItem('gdrive_access_token', res.accessToken);
+              localStorage.setItem('gdrive_token_expires_at', (Date.now() + res.expiresIn * 1000).toString());
+              setCloudAccessToken(res.accessToken);
+            } catch (err) {
+              console.error("Erreur de rafraîchissement initial Google Drive:", err);
+            }
+          }
+        } catch (e) {
+          console.error("Erreur de chargement des paramètres Google Drive:", e);
+        }
+      }
+    };
+
+    loadGDriveSettings();
+  }, [supabaseConnected]);
+
+  // Rafraîchissement automatique périodique du jeton Google Drive
+  useEffect(() => {
+    const handleAutoRefresh = async () => {
+      const refreshToken = localStorage.getItem('gdrive_refresh_token');
+      if (!refreshToken) return;
+
+      const expiresAt = localStorage.getItem('gdrive_token_expires_at');
+      const isExpired = !expiresAt || Date.now() > parseInt(expiresAt) - 60000;
+
+      if (isExpired) {
+        const cId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+        const cSec = import.meta.env.VITE_GOOGLE_CLIENT_SECRET || '';
+
+        try {
+          const res = await refreshGoogleAccessToken(cId, cSec, refreshToken);
+          localStorage.setItem('gdrive_access_token', res.accessToken);
+          localStorage.setItem('gdrive_token_expires_at', (Date.now() + res.expiresIn * 1000).toString());
+          setCloudAccessToken(res.accessToken);
+          console.log("Jeton d'accès Google Drive rafraîchi avec succès.");
+        } catch (err) {
+          console.error("Erreur lors du rafraîchissement du jeton Google Drive:", err);
+        }
+      }
+    };
+
+    const interval = setInterval(handleAutoRefresh, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Générateur de dump SQL compatible PostgreSQL
+  const generateSqlDump = (data) => {
+    let sql = `-- Planicorne 2 Database Backup\n`;
+    sql += `-- Generated at ${new Date().toISOString()}\n\n`;
+    
+    // Disable foreign key checks for clean restoration
+    sql += `SET session_replication_role = 'replica';\n\n`;
+
+    // 1. Companies
+    sql += `-- Table public.companies\n`;
+    sql += `CREATE TABLE IF NOT EXISTS public.companies (\n`;
+    sql += `  id text PRIMARY KEY,\n`;
+    sql += `  name text NOT NULL,\n`;
+    sql += `  logo_drive_id text,\n`;
+    sql += `  contract_linkedin integer DEFAULT 0,\n`;
+    sql += `  contract_facebook integer DEFAULT 0,\n`;
+    sql += `  contract_instagram integer DEFAULT 0,\n`;
+    sql += `  contract_google integer DEFAULT 0,\n`;
+    sql += `  contract_blog integer DEFAULT 0,\n`;
+    sql += `  contract_newsletter integer DEFAULT 0,\n`;
+    sql += `  contract_details jsonb\n`;
+    sql += `);\n\n`;
+
+    if (data.companies && data.companies.length > 0) {
+      data.companies.forEach(row => {
+        const name = row.name ? `'${row.name.replace(/'/g, "''")}'` : 'NULL';
+        const logo = row.logo_drive_id ? `'${row.logo_drive_id.replace(/'/g, "''")}'` : 'NULL';
+        const details = row.contract_details ? `'${JSON.stringify(row.contract_details).replace(/'/g, "''")}'::jsonb` : 'NULL';
+        sql += `INSERT INTO public.companies (id, name, logo_drive_id, contract_linkedin, contract_facebook, contract_instagram, contract_google, contract_blog, contract_newsletter, contract_details) `;
+        sql += `VALUES ('${row.id}', ${name}, ${logo}, ${row.contract_linkedin || 0}, ${row.contract_facebook || 0}, ${row.contract_instagram || 0}, ${row.contract_google || 0}, ${row.contract_blog || 0}, ${row.contract_newsletter || 0}, ${details}) `;
+        sql += `ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, logo_drive_id = EXCLUDED.logo_drive_id, contract_linkedin = EXCLUDED.contract_linkedin, contract_facebook = EXCLUDED.contract_facebook, contract_instagram = EXCLUDED.contract_instagram, contract_google = EXCLUDED.contract_google, contract_blog = EXCLUDED.contract_blog, contract_newsletter = EXCLUDED.contract_newsletter, contract_details = EXCLUDED.contract_details;\n`;
+      });
+      sql += `\n`;
+    }
+
+    // 2. Clients
+    sql += `-- Table public.clients\n`;
+    sql += `CREATE TABLE IF NOT EXISTS public.clients (\n`;
+    sql += `  id text PRIMARY KEY,\n`;
+    sql += `  name text NOT NULL,\n`;
+    sql += `  email text UNIQUE NOT NULL,\n`;
+    sql += `  company_id text REFERENCES public.companies(id) ON DELETE SET NULL\n`;
+    sql += `);\n\n`;
+
+    if (data.clients && data.clients.length > 0) {
+      data.clients.forEach(row => {
+        const name = row.name ? `'${row.name.replace(/'/g, "''")}'` : 'NULL';
+        const email = row.email ? `'${row.email.replace(/'/g, "''")}'` : 'NULL';
+        const compId = row.company_id ? `'${row.company_id}'` : 'NULL';
+        sql += `INSERT INTO public.clients (id, name, email, company_id) VALUES ('${row.id}', ${name}, ${email}, ${compId}) `;
+        sql += `ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email, company_id = EXCLUDED.company_id;\n`;
+      });
+      sql += `\n`;
+    }
+
+    // 3. Stepup Users
+    sql += `-- Table public.stepup_users\n`;
+    sql += `CREATE TABLE IF NOT EXISTS public.stepup_users (\n`;
+    sql += `  id text PRIMARY KEY,\n`;
+    sql += `  name text NOT NULL,\n`;
+    sql += `  email text UNIQUE NOT NULL,\n`;
+    sql += `  role text\n`;
+    sql += `);\n\n`;
+
+    if (data.stepup_users && data.stepup_users.length > 0) {
+      data.stepup_users.forEach(row => {
+        const name = row.name ? `'${row.name.replace(/'/g, "''")}'` : 'NULL';
+        const email = row.email ? `'${row.email.replace(/'/g, "''")}'` : 'NULL';
+        const role = row.role ? `'${row.role.replace(/'/g, "''")}'` : 'NULL';
+        sql += `INSERT INTO public.stepup_users (id, name, email, role) VALUES ('${row.id}', ${name}, ${email}, ${role}) `;
+        sql += `ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email, role = EXCLUDED.role;\n`;
+      });
+      sql += `\n`;
+    }
+
+    // 4. App Users
+    sql += `-- Table public.app_users\n`;
+    sql += `CREATE TABLE IF NOT EXISTS public.app_users (\n`;
+    sql += `  id text PRIMARY KEY,\n`;
+    sql += `  email text UNIQUE NOT NULL,\n`;
+    sql += `  password text NOT NULL,\n`;
+    sql += `  name text NOT NULL,\n`;
+    sql += `  role text NOT NULL,\n`;
+    sql += `  client_id text REFERENCES public.clients(id) ON DELETE SET NULL,\n`;
+    sql += `  stepup_user_id text REFERENCES public.stepup_users(id) ON DELETE SET NULL\n`;
+    sql += `);\n\n`;
+
+    if (data.app_users && data.app_users.length > 0) {
+      data.app_users.forEach(row => {
+        const name = row.name ? `'${row.name.replace(/'/g, "''")}'` : 'NULL';
+        const email = row.email ? `'${row.email.replace(/'/g, "''")}'` : 'NULL';
+        const password = row.password ? `'${row.password.replace(/'/g, "''")}'` : 'NULL';
+        const role = row.role ? `'${row.role.replace(/'/g, "''")}'` : 'NULL';
+        const clientId = row.client_id ? `'${row.client_id}'` : 'NULL';
+        const stepupUserId = row.stepup_user_id ? `'${row.stepup_user_id}'` : 'NULL';
+        sql += `INSERT INTO public.app_users (id, email, password, name, role, client_id, stepup_user_id) `;
+        sql += `VALUES ('${row.id}', ${email}, ${password}, ${name}, ${role}, ${clientId}, ${stepupUserId}) `;
+        sql += `ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, password = EXCLUDED.password, name = EXCLUDED.name, role = EXCLUDED.role, client_id = EXCLUDED.client_id, stepup_user_id = EXCLUDED.stepup_user_id;\n`;
+      });
+      sql += `\n`;
+    }
+
+    // 5. Posts
+    sql += `-- Table public.posts\n`;
+    sql += `CREATE TABLE IF NOT EXISTS public.posts (\n`;
+    sql += `  id text PRIMARY KEY,\n`;
+    sql += `  title text NOT NULL,\n`;
+    sql += `  content text,\n`;
+    sql += `  platform text NOT NULL,\n`;
+    sql += `  status text NOT NULL,\n`;
+    sql += `  attachments jsonb DEFAULT '[]'::jsonb,\n`;
+    sql += `  "createdAt" timestamp with time zone DEFAULT now(),\n`;
+    sql += `  "updatedAt" timestamp with time zone DEFAULT now(),\n`;
+    sql += `  "scheduledAt" timestamp with time zone,\n`;
+    sql += `  company_id text REFERENCES public.companies(id) ON DELETE SET NULL,\n`;
+    sql += `  client_id text REFERENCES public.clients(id) ON DELETE SET NULL\n`;
+    sql += `);\n\n`;
+
+    if (data.posts && data.posts.length > 0) {
+      data.posts.forEach(row => {
+        const title = row.title ? `'${row.title.replace(/'/g, "''")}'` : 'NULL';
+        const content = row.content ? `'${row.content.replace(/'/g, "''")}'` : 'NULL';
+        const attachments = row.attachments ? `'${JSON.stringify(row.attachments).replace(/'/g, "''")}'::jsonb` : `'[]'::jsonb`;
+        const created = row.createdAt ? `'${row.createdAt}'` : 'now()';
+        const updated = row.updatedAt ? `'${row.updatedAt}'` : 'now()';
+        const scheduled = row.scheduledAt ? `'${row.scheduledAt}'` : 'NULL';
+        const compId = row.company_id ? `'${row.company_id}'` : 'NULL';
+        const clientId = row.client_id ? `'${row.client_id}'` : 'NULL';
+        sql += `INSERT INTO public.posts (id, title, content, platform, status, attachments, "createdAt", "updatedAt", "scheduledAt", company_id, client_id) `;
+        sql += `VALUES ('${row.id}', ${title}, ${content}, '${row.platform}', '${row.status}', ${attachments}, ${created}, ${updated}, ${scheduled}, ${compId}, ${clientId}) `;
+        sql += `ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, content = EXCLUDED.content, platform = EXCLUDED.platform, status = EXCLUDED.status, attachments = EXCLUDED.attachments, "createdAt" = EXCLUDED."createdAt", "updatedAt" = EXCLUDED."updatedAt", "scheduledAt" = EXCLUDED."scheduledAt", company_id = EXCLUDED.company_id, client_id = EXCLUDED.client_id;\n`;
+      });
+      sql += `\n`;
+    }
+
+    // 6. Comments
+    sql += `-- Table public.comments\n`;
+    sql += `CREATE TABLE IF NOT EXISTS public.comments (\n`;
+    sql += `  id text PRIMARY KEY,\n`;
+    sql += `  post_id text REFERENCES public.posts(id) ON DELETE CASCADE,\n`;
+    sql += `  content text NOT NULL,\n`;
+    sql += `  "createdAt" timestamp with time zone DEFAULT now(),\n`;
+    sql += `  client_author_id text REFERENCES public.clients(id) ON DELETE SET NULL,\n`;
+    sql += `  stepup_author_id text REFERENCES public.stepup_users(id) ON DELETE SET NULL\n`;
+    sql += `);\n\n`;
+
+    if (data.comments && data.comments.length > 0) {
+      data.comments.forEach(row => {
+        const content = row.content ? `'${row.content.replace(/'/g, "''")}'` : 'NULL';
+        const created = row.createdAt ? `'${row.createdAt}'` : 'now()';
+        const clientAuthId = row.client_author_id ? `'${row.client_author_id}'` : 'NULL';
+        const stepupAuthId = row.stepup_author_id ? `'${row.stepup_author_id}'` : 'NULL';
+        sql += `INSERT INTO public.comments (id, post_id, content, "createdAt", client_author_id, stepup_author_id) `;
+        sql += `VALUES ('${row.id}', '${row.post_id}', ${content}, ${created}, ${clientAuthId}, ${stepupAuthId}) `;
+        sql += `ON CONFLICT (id) DO UPDATE SET post_id = EXCLUDED.post_id, content = EXCLUDED.content, "createdAt" = EXCLUDED."createdAt", client_author_id = EXCLUDED.client_author_id, stepup_author_id = EXCLUDED.stepup_author_id;\n`;
+      });
+      sql += `\n`;
+    }
+
+    // Restore foreign key checks
+    sql += `SET session_replication_role = 'origin';\n`;
+
+    return sql;
+  };
+
   // Fonction pour déclencher une sauvegarde manuelle ou planifiée
-  const triggerSupabaseBackup = async () => {
+  const triggerSupabaseBackup = useCallback(async () => {
     if (!cloudAccessToken || !backupFolderId) {
       console.warn("Impossible de sauvegarder : Token ou Dossier Google Drive manquant.");
       return;
@@ -240,14 +481,15 @@ function App() {
       // 1. Récupération des données Supabase
       const data = await fetchAllDatabaseData();
 
-      // 2. Génération du nom de fichier unique
+      // 2. Génération du dump SQL et nom du fichier
+      const sqlDump = generateSqlDump(data);
       const now = new Date();
       const dateStr = now.toISOString().split('T')[0];
       const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
-      const fileName = `supabase_backup_${dateStr}_${timeStr}.json`;
+      const fileName = `supabase_backup_${dateStr}_${timeStr}.sql`;
 
       // 3. Téléversement vers Drive
-      await uploadBackupToDrive(cloudAccessToken, backupFolderId, data, fileName);
+      await uploadBackupToDrive(cloudAccessToken, backupFolderId, sqlDump, fileName);
 
       // 4. Succès
       const successTime = Date.now().toString();
@@ -263,7 +505,7 @@ function App() {
       localStorage.setItem('last_supabase_backup_time', failTime);
       localStorage.setItem('last_supabase_backup_status', `Erreur : ${err.message || err}`);
     }
-  };
+  }, [cloudAccessToken, backupFolderId]);
 
   // Effect de tâche de fond pour lancer la sauvegarde horaire automatique
   useEffect(() => {
@@ -285,7 +527,7 @@ function App() {
 
     const interval = setInterval(checkAndRunBackup, 60000); // Vérification chaque minute
     return () => clearInterval(interval);
-  }, [autoBackupEnabled, cloudAccessToken, backupFolderId, syncMode, supabaseConnected]);
+  }, [autoBackupEnabled, cloudAccessToken, backupFolderId, syncMode, supabaseConnected, triggerSupabaseBackup]);
 
   // Effectuer la migration de LocalStorage vers Supabase
   const handleMigrateCards = async () => {
@@ -309,78 +551,24 @@ function App() {
   // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const loadCards = useCallback(async () => {
     try {
-      if (syncMode === 'supabase') {
-        const tableExists = await checkSupabaseDb();
-        if (tableExists) {
-          let dbCards = await fetchPosts(currentUser);
-          if (currentUser?.role?.trim().toLowerCase() === 'client') {
-            dbCards = dbCards.filter(card => 
-              (currentUser.company_id && card.company_id === currentUser.company_id) ||
-              (currentUser.client_id && card.client_id === currentUser.client_id)
-            );
-          }
-          setCards(dbCards);
-        } else {
-          setCards([]);
+      const tableExists = await checkSupabaseDb();
+      if (tableExists) {
+        let dbCards = await fetchPosts(currentUser);
+        if (currentUser?.role?.trim().toLowerCase() === 'client') {
+          dbCards = dbCards.filter(card => 
+            (currentUser.company_id && card.company_id === currentUser.company_id) ||
+            (currentUser.client_id && card.client_id === currentUser.client_id)
+          );
         }
-        setLocalPermissionNeeded(false);
+        setCards(dbCards);
+      } else {
+        setCards([]);
       }
-      else if (syncMode === 'local') {
-        const stored = localStorage.getItem('trello_cards');
-        if (stored) {
-          setCards(JSON.parse(stored));
-        } else {
-          // Si vide, charger les exemples premium et les enregistrer dans localStorage
-          setCards(INITIAL_CARDS);
-          localStorage.setItem('trello_cards', JSON.stringify(INITIAL_CARDS));
-        }
-        setLocalPermissionNeeded(false);
-      } 
-      else if (syncMode === 'local_dir') {
-        let handle = localDirectoryHandle;
-        
-        // Tenter de restaurer le handle depuis IndexedDB
-        if (!handle) {
-          try {
-            handle = await getHandleFromDB();
-            if (handle) {
-              setLocalDirectoryHandle(handle);
-              setLocalDirectoryName(handle.name);
-            }
-          } catch (e) {
-            console.warn("Impossible de restaurer le dossier local depuis IndexedDB:", e);
-          }
-        }
-
-        if (handle) {
-          const hasPermission = await verifyPermission(handle, true);
-          if (hasPermission) {
-            setLocalPermissionNeeded(false);
-            const localCards = await readCardsFromDirectory(handle);
-            setCards(localCards);
-          } else {
-            setLocalPermissionNeeded(true);
-          }
-        } else {
-          // Si le handle n'existe pas, repasser en mode local
-          setSyncMode('local');
-          localStorage.setItem('sync_mode', 'local');
-        }
-      } 
-      else if (syncMode === 'cloud') {
-        if (cloudAccessToken && cloudFolderId) {
-          const cloudCards = await readCardsFromDriveCloud(cloudAccessToken, cloudFolderId);
-          setCards(cloudCards);
-        } else {
-          // Si pas d'accès, repasser en local
-          setSyncMode('local');
-          localStorage.setItem('sync_mode', 'local');
-        }
-      }
+      setLocalPermissionNeeded(false);
     } catch (error) {
       console.error("Erreur lors du chargement des cartes de posts:", error);
     }
-  }, [syncMode, localDirectoryHandle, cloudAccessToken, cloudFolderId, checkSupabaseDb, currentUser?.role, currentUser?.company_id, currentUser?.client_id]);
+  }, [checkSupabaseDb, currentUser]);
 
   // Déclencher le rechargement quand le mode change
   useEffect(() => {
@@ -445,15 +633,7 @@ function App() {
           updatedCards[index] = updatedCard;
           
           // Persister la modification
-          if (syncMode === 'supabase') {
-            await updatePost(editingCardId, cardData);
-          } else if (syncMode === 'local') {
-            localStorage.setItem('trello_cards', JSON.stringify(updatedCards));
-          } else if (syncMode === 'local_dir' && localDirectoryHandle) {
-            await writeCardToDirectory(localDirectoryHandle, updatedCard);
-          } else if (syncMode === 'cloud' && cloudAccessToken) {
-            await writeCardToDriveCloud(cloudAccessToken, cloudFolderId, updatedCard);
-          }
+          await updatePost(editingCardId, cardData);
         }
       } else {
         // Cas : Création d'une nouvelle carte
@@ -463,17 +643,9 @@ function App() {
           createdAt: new Date().toISOString()
         };
         updatedCards.unshift(newCard); // Ajouter en haut de la liste
-
+        
         // Persister la création
-        if (syncMode === 'supabase') {
-          await insertPost(newCard);
-        } else if (syncMode === 'local') {
-          localStorage.setItem('trello_cards', JSON.stringify(updatedCards));
-        } else if (syncMode === 'local_dir' && localDirectoryHandle) {
-          await writeCardToDirectory(localDirectoryHandle, newCard);
-        } else if (syncMode === 'cloud' && cloudAccessToken) {
-          await writeCardToDriveCloud(cloudAccessToken, cloudFolderId, newCard);
-        }
+        await insertPost(newCard);
       }
     } catch (dbError) {
       handleDbError(dbError, "Erreur lors de la sauvegarde Supabase :");
@@ -491,10 +663,31 @@ function App() {
     // Nettoyer la session d'édition seulement APRÈS redirection
     setTimeout(() => {
       setEditingCardId(null);
+      setEditingTitle('');
       setContent('');
       setAttachments([]);
       setScheduledAt('');
+      setEditingCompanyId('');
+      setEditingStatus('draft');
     }, 100);
+  };
+
+  const handleDirectSave = async () => {
+    if (!editingTitle.trim()) {
+      alert("Veuillez saisir un titre pour la publication.");
+      return;
+    }
+    if (!editingCompanyId) {
+      alert("Veuillez choisir une entreprise pour cette publication.");
+      return;
+    }
+
+    await handleSaveCard({
+      title: editingTitle.trim(),
+      column: editingStatus,
+      scheduledAt: scheduledAt || null,
+      company_id: editingCompanyId
+    });
   };
 
   // Validation par le client (colonne "À valider" -> "Prêt à publier")
@@ -561,15 +754,7 @@ function App() {
 
     // Persister le déplacement
     try {
-      if (syncMode === 'supabase') {
-        await updatePost(cardId, { status: newColumnId });
-      } else if (syncMode === 'local') {
-        localStorage.setItem('trello_cards', JSON.stringify(updatedCards));
-      } else if (syncMode === 'local_dir' && localDirectoryHandle) {
-        await writeCardToDirectory(localDirectoryHandle, updatedCard);
-      } else if (syncMode === 'cloud' && cloudAccessToken) {
-        await writeCardToDriveCloud(cloudAccessToken, cloudFolderId, updatedCard);
-      }
+      await updatePost(cardId, { status: newColumnId });
     } catch (dbError) {
       console.error("Erreur lors du déplacement dans Supabase:", dbError);
       alert("Erreur lors de la mise à jour sur Supabase.");
@@ -583,15 +768,7 @@ function App() {
 
     // Persister la suppression
     try {
-      if (syncMode === 'supabase') {
-        await deletePost(cardId);
-      } else if (syncMode === 'local') {
-        localStorage.setItem('trello_cards', JSON.stringify(updatedCards));
-      } else if (syncMode === 'local_dir' && localDirectoryHandle) {
-        await deleteCardFromDirectory(localDirectoryHandle, cardId);
-      } else if (syncMode === 'cloud' && cloudAccessToken) {
-        await deleteCardFromDriveCloud(cloudAccessToken, cloudFolderId, cardId);
-      }
+      await deletePost(cardId);
     } catch (dbError) {
       console.error("Erreur lors de la suppression dans Supabase:", dbError);
       alert("Erreur lors de la suppression sur Supabase.");
@@ -603,40 +780,30 @@ function App() {
     }
   };
 
-  // Charger une carte dans l'éditeur (bidirectionnalité)
-  const handleEditCard = (card) => {
-    setContent(card.content);
-    setSelectedPlatform(card.platform);
-    setAttachments(card.attachments || []);
-    setScheduledAt(card.scheduledAt || '');
-    setEditingCardId(card.id);
+  // Préparer la création d'un nouveau post dans l'éditeur (sans pop-up)
+  const handleAddCard = (prefilledData = {}) => {
+    setEditingCardId(null);
+    setEditingTitle('');
+    setContent('');
+    setSelectedPlatform(prefilledData.platform || 'linkedin');
+    setAttachments([]);
+    setScheduledAt(prefilledData.scheduledAt || '');
+    setEditingCompanyId(prefilledData.company_id || (companies.length > 0 ? companies[0].id : ''));
+    setEditingStatus(prefilledData.status || 'draft');
     setActiveTab('editor');
   };
 
-  // Ajouter directement une carte depuis le tableau (carte vide)
-  const handleAddCardDirectly = async (newCardData) => {
-    const newCard = {
-      ...newCardData,
-      id: Date.now().toString(),
-      attachments: []
-    };
-
-    const updatedCards = [newCard, ...cards];
-    setCards(updatedCards);
-
-    try {
-      if (syncMode === 'supabase') {
-        await insertPost(newCard);
-      } else if (syncMode === 'local') {
-        localStorage.setItem('trello_cards', JSON.stringify(updatedCards));
-      } else if (syncMode === 'local_dir' && localDirectoryHandle) {
-        await writeCardToDirectory(localDirectoryHandle, newCard);
-      } else if (syncMode === 'cloud' && cloudAccessToken) {
-        await writeCardToDriveCloud(cloudAccessToken, cloudFolderId, newCard);
-      }
-    } catch (dbError) {
-      handleDbError(dbError, "Erreur lors de la création sur Supabase :");
-    }
+  // Charger une carte dans l'éditeur (bidirectionnalité)
+  const handleEditCard = (card) => {
+    setContent(card.content || '');
+    setSelectedPlatform(card.platform || 'linkedin');
+    setAttachments(card.attachments || []);
+    setScheduledAt(card.scheduledAt || '');
+    setEditingCardId(card.id);
+    setEditingTitle(card.title || '');
+    setEditingCompanyId(card.company_id || '');
+    setEditingStatus(card.status || 'draft');
+    setActiveTab('editor');
   };
 
   // Mettre à jour la date de publication d'une carte existante (depuis le Kanban)
@@ -655,17 +822,7 @@ function App() {
     setCards(updatedCards);
 
     try {
-      if (syncMode === 'supabase') {
-        await updatePost(cardId, { scheduledAt: finalDate });
-      } else if (syncMode === 'local') {
-        localStorage.setItem('trello_cards', JSON.stringify(updatedCards));
-      } else if (syncMode === 'local_dir' && localDirectoryHandle) {
-        const card = updatedCards.find(c => c.id === cardId);
-        await writeCardToDirectory(localDirectoryHandle, card);
-      } else if (syncMode === 'cloud' && cloudAccessToken) {
-        const card = updatedCards.find(c => c.id === cardId);
-        await writeCardToDriveCloud(cloudAccessToken, cloudFolderId, card);
-      }
+      await updatePost(cardId, { scheduledAt: finalDate });
     } catch (dbError) {
       handleDbError(dbError, "Erreur lors de la mise à jour de la date de publication :");
     }
@@ -683,8 +840,6 @@ function App() {
         toggleTheme={toggleTheme} 
         activeTab={activeTab} 
         setActiveTab={setActiveTab}
-        syncMode={syncMode}
-        localDirectoryName={localDirectoryName}
         supabaseConnected={supabaseConnected}
         supabaseTableExists={supabaseTableExists}
         currentUser={currentUser}
@@ -770,42 +925,39 @@ function App() {
               </div>
             )}
             
-            <div className="workspace">
-              <div className="workspace-left">
-                <PostEditor 
-                  content={content} 
-                  onChange={setContent} 
-                  platform={selectedPlatform} 
-                  attachments={attachments}
-                  onUpdateAttachments={setAttachments}
-                  readOnly={currentUser?.role?.trim().toLowerCase() === 'client'}
-                  scheduledAt={scheduledAt}
-                  onUpdateScheduledAt={setScheduledAt}
-                />
+            <div className={`workspace ${syncMode === 'supabase' && editingCardId ? 'has-comments' : ''}`}>
+              <PostEditor 
+                title={editingTitle}
+                onChangeTitle={setEditingTitle}
+                companyId={editingCompanyId}
+                onChangeCompanyId={setEditingCompanyId}
+                status={editingStatus}
+                onChangeStatus={setEditingStatus}
+                companies={companies}
+                content={content} 
+                onChange={setContent} 
+                platform={selectedPlatform} 
+                attachments={attachments}
+                onUpdateAttachments={setAttachments}
+                readOnly={currentUser?.role?.trim().toLowerCase() === 'client'}
+                scheduledAt={scheduledAt}
+                onUpdateScheduledAt={setScheduledAt}
+              />
 
-                {/* Section discussion et commentaires pour les cartes existantes */}
-                {syncMode === 'supabase' && editingCardId && (
-                  <CommentsSection 
-                    postId={editingCardId} 
-                    clients={clients} 
-                    stepupUsers={stepupUsers} 
-                    currentUser={currentUser}
-                  />
-                )}
-              </div>
-              
-              <div className="workspace-right">
-                <PostPreview 
-                  content={content} 
-                  platform={selectedPlatform} 
-                  attachments={attachments}
+              {/* Section discussion et commentaires pour les cartes existantes */}
+              {syncMode === 'supabase' && editingCardId && (
+                <CommentsSection 
+                  postId={editingCardId} 
+                  clients={clients} 
+                  stepupUsers={stepupUsers} 
+                  currentUser={currentUser}
                 />
-              </div>
+              )}
             </div>
             
             <ActionPanel 
               content={content} 
-              onSaveToTrello={() => setIsSaveModalOpen(true)}
+              onSaveToTrello={handleDirectSave}
               isEditingExistingCard={!!editingCardId}
               readOnly={currentUser?.role?.trim().toLowerCase() === 'client'}
               isClient={currentUser?.role?.trim().toLowerCase() === 'client'}
@@ -820,13 +972,16 @@ function App() {
           <Board 
             cards={cards} 
             companies={companies}
+            stepupUsers={stepupUsers}
             onMoveCard={handleMoveCard}
             onDeleteCard={handleDeleteCard}
             onEditCard={handleEditCard}
-            onAddCardDirectly={handleAddCardDirectly}
+            onAddCard={handleAddCard}
             onUpdateCardDate={handleUpdateCardDate}
             syncMode={syncMode}
             currentUser={currentUser}
+            selectedCompanyFilter={selectedCompanyFilter}
+            setSelectedCompanyFilter={setSelectedCompanyFilter}
           />
         )}
 
@@ -834,8 +989,12 @@ function App() {
         {activeTab === 'calendar' && (
           <CalendarView 
             cards={cards}
+            companies={companies}
             onEditCard={handleEditCard}
-            onAddCardDirectly={handleAddCardDirectly}
+            onAddCard={handleAddCard}
+            selectedCompanyFilter={selectedCompanyFilter}
+            setSelectedCompanyFilter={setSelectedCompanyFilter}
+            currentUser={currentUser}
           />
         )}
 
@@ -880,20 +1039,6 @@ function App() {
         )}
       </main>
 
-      {/* MODAL D'ENREGISTREMENT */}
-      {isSaveModalOpen && (
-        <SaveCardModal 
-          isOpen={isSaveModalOpen}
-          onClose={() => setIsSaveModalOpen(false)}
-          onSave={handleSaveCard}
-          initialTitle={activeEditingCard ? activeEditingCard.title : (content ? content.split('\n')[0].substring(0, 30) : '')}
-          initialColumn={activeEditingCard ? activeEditingCard.status : 'draft'}
-          initialScheduledAt={activeEditingCard ? activeEditingCard.scheduledAt : ''}
-          initialCompanyId={activeEditingCard ? activeEditingCard.company_id : ''}
-          companies={companies}
-          isUpdate={!!editingCardId}
-        />
-      )}
     </div>
   );
 }

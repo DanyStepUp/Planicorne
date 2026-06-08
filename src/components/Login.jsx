@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Mail, Lock, ShieldAlert, LogIn, Sparkles } from 'lucide-react';
+import { Mail, Lock, ShieldAlert, LogIn } from 'lucide-react';
 import { authenticateUser, logConnection } from '../utils/supabaseService';
 import './Login.css';
 

@@ -37,12 +37,7 @@ export default function AdminPanel({
   // Form states - Company
   const [companyName, setCompanyName] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
-  const [contractLinkedin, setContractLinkedin] = useState(0);
-  const [contractFacebook, setContractFacebook] = useState(0);
-  const [contractInstagram, setContractInstagram] = useState(0);
-  const [contractGoogle, setContractGoogle] = useState(0);
-  const [contractBlog, setContractBlog] = useState(0);
-  const [contractNewsletter, setContractNewsletter] = useState(0);
+
   const [contractDetails, setContractDetails] = useState({
     linkedin: { count: 0, period: 'month' },
     facebook: { count: 0, period: 'month' },
@@ -64,6 +59,7 @@ export default function AdminPanel({
   const [stepupEmail, setStepupEmail] = useState('');
   const [stepupPassword, setStepupPassword] = useState('');
   const [stepupRole, setStepupRole] = useState('Rédacteur');
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState([]);
 
   const [loading, setLoading] = useState(false);
 
@@ -85,12 +81,7 @@ export default function AdminPanel({
     // Reset company form
     setCompanyName('');
     setLogoUrl('');
-    setContractLinkedin(0);
-    setContractFacebook(0);
-    setContractInstagram(0);
-    setContractGoogle(0);
-    setContractBlog(0);
-    setContractNewsletter(0);
+
     setContractDetails({
       linkedin: { count: 0, period: 'month' },
       facebook: { count: 0, period: 'month' },
@@ -112,6 +103,7 @@ export default function AdminPanel({
     setStepupEmail('');
     setStepupPassword('');
     setStepupRole('Rédacteur');
+    setSelectedCompanyIds([]);
   };
 
   const handleStartEditCompany = (comp) => {
@@ -151,12 +143,7 @@ export default function AdminPanel({
       unquantifiable: unquantifiableText
     });
 
-    setContractLinkedin(comp.contract_linkedin || 0);
-    setContractFacebook(comp.contract_facebook || 0);
-    setContractInstagram(comp.contract_instagram || 0);
-    setContractGoogle(comp.contract_google || 0);
-    setContractBlog(comp.contract_blog || 0);
-    setContractNewsletter(comp.contract_newsletter || 0);
+
     setActiveFormTab('company');
   };
 
@@ -175,6 +162,7 @@ export default function AdminPanel({
     setStepupName(user.name);
     setStepupEmail(user.email);
     setStepupRole(user.role || 'Rédacteur');
+    setSelectedCompanyIds(user.company_ids || []);
     setActiveFormTab('stepup');
   };
 
@@ -215,12 +203,7 @@ export default function AdminPanel({
 
       setCompanyName('');
       setLogoUrl('');
-      setContractLinkedin(0);
-      setContractFacebook(0);
-      setContractInstagram(0);
-      setContractGoogle(0);
-      setContractBlog(0);
-      setContractNewsletter(0);
+
       setContractDetails({
         linkedin: { count: 0, period: 'month' },
         facebook: { count: 0, period: 'month' },
@@ -332,7 +315,7 @@ export default function AdminPanel({
           role: stepupRole
         }, {
           password: stepupPassword.trim() || undefined
-        });
+        }, selectedCompanyIds);
 
         alert(`Le collaborateur Step Up "${stepupName}" a été mis à jour avec succès !`);
         setEditingStepup(null);
@@ -346,7 +329,7 @@ export default function AdminPanel({
           name: stepupName.trim(),
           email: stepupEmail.trim(),
           role: stepupRole
-        });
+        }, selectedCompanyIds);
 
         // 2. Create login account
         await createAppUser({
@@ -365,6 +348,7 @@ export default function AdminPanel({
       setStepupEmail('');
       setStepupPassword('');
       setStepupRole('Rédacteur');
+      setSelectedCompanyIds([]);
 
       if (onRefreshData) await onRefreshData();
     } catch (err) {
@@ -445,62 +429,79 @@ export default function AdminPanel({
 
                 <div className="contract-grid-title">Détails de production & Fréquence par canal :</div>
 
-                <div className="contract-inputs-grid">
-                  <div className="form-group">
-                    <label>LinkedIn</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={contractDetails.linkedin.count}
-                      onChange={(e) => setContractDetails(prev => ({
-                        ...prev,
-                        linkedin: { ...prev.linkedin, count: parseInt(e.target.value) || 0 }
-                      }))}
-                    />
-                  </div>
-
-                  <div className="form-group">
+                <div className="contract-platforms-list">
+                  {/* 1. Facebook */}
+                  <div className="contract-platform-row">
                     <label>Facebook</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={contractDetails.facebook.count}
-                      onChange={(e) => setContractDetails(prev => ({
-                        ...prev,
-                        facebook: { ...prev.facebook, count: parseInt(e.target.value) || 0 }
-                      }))}
-                    />
+                    <div className="platform-input-group">
+                      <input
+                        type="number"
+                        min="0"
+                        value={contractDetails.facebook.count}
+                        onChange={(e) => setContractDetails(prev => ({
+                          ...prev,
+                          facebook: { ...prev.facebook, count: parseInt(e.target.value) || 0 }
+                        }))}
+                      />
+                      <span className="input-period-static">par mois</span>
+                    </div>
                   </div>
 
-                  <div className="form-group">
+                  {/* 2. Instagram */}
+                  <div className="contract-platform-row">
                     <label>Instagram</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={contractDetails.instagram.count}
-                      onChange={(e) => setContractDetails(prev => ({
-                        ...prev,
-                        instagram: { ...prev.instagram, count: parseInt(e.target.value) || 0 }
-                      }))}
-                    />
+                    <div className="platform-input-group">
+                      <input
+                        type="number"
+                        min="0"
+                        value={contractDetails.instagram.count}
+                        onChange={(e) => setContractDetails(prev => ({
+                          ...prev,
+                          instagram: { ...prev.instagram, count: parseInt(e.target.value) || 0 }
+                        }))}
+                      />
+                      <span className="input-period-static">par mois</span>
+                    </div>
                   </div>
 
-                  <div className="form-group">
-                    <label>Google Business</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={contractDetails.google.count}
-                      onChange={(e) => setContractDetails(prev => ({
-                        ...prev,
-                        google: { ...prev.google, count: parseInt(e.target.value) || 0 }
-                      }))}
-                    />
+                  {/* 3. LinkedIn */}
+                  <div className="contract-platform-row">
+                    <label>LinkedIn</label>
+                    <div className="platform-input-group">
+                      <input
+                        type="number"
+                        min="0"
+                        value={contractDetails.linkedin.count}
+                        onChange={(e) => setContractDetails(prev => ({
+                          ...prev,
+                          linkedin: { ...prev.linkedin, count: parseInt(e.target.value) || 0 }
+                        }))}
+                      />
+                      <span className="input-period-static">par mois</span>
+                    </div>
                   </div>
 
-                  <div className="form-group">
-                    <label>Billet de Blog</label>
-                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                  {/* 4. Google Posts */}
+                  <div className="contract-platform-row">
+                    <label>Google Posts</label>
+                    <div className="platform-input-group">
+                      <input
+                        type="number"
+                        min="0"
+                        value={contractDetails.google.count}
+                        onChange={(e) => setContractDetails(prev => ({
+                          ...prev,
+                          google: { ...prev.google, count: parseInt(e.target.value) || 0 }
+                        }))}
+                      />
+                      <span className="input-period-static">par mois</span>
+                    </div>
+                  </div>
+
+                  {/* 5. Billet de blog */}
+                  <div className="contract-platform-row">
+                    <label>Billet de blog</label>
+                    <div className="platform-input-group">
                       <input
                         type="number"
                         min="0"
@@ -509,7 +510,6 @@ export default function AdminPanel({
                           ...prev,
                           blog: { ...prev.blog, count: parseInt(e.target.value) || 0 }
                         }))}
-                        style={{ width: '70px', flex: '0 0 70px' }}
                       />
                       <select
                         value={contractDetails.blog.period}
@@ -517,18 +517,19 @@ export default function AdminPanel({
                           ...prev,
                           blog: { ...prev.blog, period: e.target.value }
                         }))}
-                        style={{ flex: 1, minWidth: '120px', padding: '0.4rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--surface-border)', background: 'var(--surface-color)', color: 'var(--text-main)' }}
+                        style={{ background: 'var(--surface-color)', color: 'var(--text-main)', border: '1px solid var(--surface-border)' }}
                       >
                         <option value="month">par mois</option>
-                        <option value="2_months">par 2 mois</option>
-                        <option value="3_months">par 3 mois</option>
+                        <option value="2_months">tous les 2 mois</option>
+                        <option value="3_months">tous les 3 mois</option>
                       </select>
                     </div>
                   </div>
 
-                  <div className="form-group">
+                  {/* 6. Newsletter */}
+                  <div className="contract-platform-row">
                     <label>Newsletter</label>
-                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    <div className="platform-input-group">
                       <input
                         type="number"
                         min="0"
@@ -537,7 +538,6 @@ export default function AdminPanel({
                           ...prev,
                           newsletter: { ...prev.newsletter, count: parseInt(e.target.value) || 0 }
                         }))}
-                        style={{ width: '70px', flex: '0 0 70px' }}
                       />
                       <select
                         value={contractDetails.newsletter.period}
@@ -545,11 +545,11 @@ export default function AdminPanel({
                           ...prev,
                           newsletter: { ...prev.newsletter, period: e.target.value }
                         }))}
-                        style={{ flex: 1, minWidth: '120px', padding: '0.4rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--surface-border)', background: 'var(--surface-color)', color: 'var(--text-main)' }}
+                        style={{ background: 'var(--surface-color)', color: 'var(--text-main)', border: '1px solid var(--surface-border)' }}
                       >
                         <option value="month">par mois</option>
-                        <option value="2_months">par 2 mois</option>
-                        <option value="3_months">par 3 mois</option>
+                        <option value="2_months">tous les 2 mois</option>
+                        <option value="3_months">tous les 3 mois</option>
                       </select>
                     </div>
                   </div>
@@ -698,6 +698,48 @@ export default function AdminPanel({
                     onChange={(e) => setStepupPassword(e.target.value)}
                     required={!editingStepup}
                   />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                  <label>Entreprises rattachées</label>
+                  <div className="admin-checkbox-list" style={{
+                    maxHeight: '150px',
+                    overflowY: 'auto',
+                    border: '1px solid var(--surface-border)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '0.5rem',
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.35rem'
+                  }}>
+                    {companies.length > 0 ? (
+                      companies.map(comp => {
+                        const isChecked = selectedCompanyIds.includes(comp.id);
+                        return (
+                          <label key={comp.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-main)' }}>
+                            <input 
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedCompanyIds(prev => [...prev, comp.id]);
+                                } else {
+                                  setSelectedCompanyIds(prev => prev.filter(id => id !== comp.id));
+                                }
+                              }}
+                            />
+                            <span>{comp.name}</span>
+                          </label>
+                        );
+                      })
+                    ) : (
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', padding: '0.25rem' }}>Aucune entreprise enregistrée</span>
+                    )}
+                  </div>
+                  <span className="form-hint" style={{ fontSize: '0.725rem', color: 'var(--text-muted)', display: 'block', marginTop: '0.25rem' }}>
+                    Cochez les entreprises auxquelles associer ce collaborateur.
+                  </span>
                 </div>
 
                 <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -872,29 +914,37 @@ export default function AdminPanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {stepupUsers.map(user => (
-                      <tr key={user.id}>
-                        <td className="company-name-cell">
-                          <strong>{user.name}</strong>
-                        </td>
-                        <td style={{ color: 'var(--text-muted)' }}>{user.email}</td>
-                        <td>
-                          <span style={{ background: 'rgba(255,255,255,0.06)', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600 }}>
-                            {user.role}
-                          </span>
-                        </td>
-                        <td style={{ textAlign: 'center' }}>
-                          <button
-                            type="button"
-                            className="btn-option"
-                            style={{ padding: '0.4rem', background: 'rgba(25, 140, 204, 0.1)', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'var(--primary-color)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                            onClick={() => handleStartEditStepup(user)}
-                          >
-                            <Edit size={14} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {stepupUsers.map(user => {
+                      const userComps = user.company_ids ? companies.filter(c => user.company_ids.includes(c.id)).map(c => c.name) : [];
+                      return (
+                        <tr key={user.id}>
+                          <td className="company-name-cell">
+                            <strong>{user.name}</strong>
+                            {userComps.length > 0 && (
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem', fontWeight: 500 }}>
+                                💼 {userComps.join(', ')}
+                              </div>
+                            )}
+                          </td>
+                          <td style={{ color: 'var(--text-muted)' }}>{user.email}</td>
+                          <td>
+                            <span style={{ background: 'rgba(255,255,255,0.06)', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600 }}>
+                              {user.role}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              className="btn-option"
+                              style={{ padding: '0.4rem', background: 'rgba(25, 140, 204, 0.1)', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'var(--primary-color)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                              onClick={() => handleStartEditStepup(user)}
+                            >
+                              <Edit size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               ) : (

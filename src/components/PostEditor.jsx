@@ -11,6 +11,13 @@ const MAX_LENGTHS = {
 };
 
 export default function PostEditor({ 
+  title = '',
+  onChangeTitle,
+  companyId = '',
+  onChangeCompanyId,
+  status = 'draft',
+  onChangeStatus,
+  companies = [],
   content, 
   onChange, 
   platform, 
@@ -26,6 +33,7 @@ export default function PostEditor({
   
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, attachmentId: null });
   const [linkUrl, setLinkUrl] = useState('');
+  const [previewMedia, setPreviewMedia] = useState(null);
 
   const handleUrlSubmit = (e) => {
     e.preventDefault();
@@ -113,12 +121,18 @@ export default function PostEditor({
   };
 
   const handleAttachmentClick = (att) => {
-    if (att.driveId) {
-      window.open(`https://drive.google.com/file/d/${att.driveId}/view?usp=drivesdk`, '_blank');
-    } else if (att.data && att.data.startsWith('http')) {
-      window.open(att.data, '_blank');
-    }
+    setPreviewMedia(att);
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setPreviewMedia(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   let counterColor = 'var(--text-muted)';
   if (percentage > 90) counterColor = 'var(--danger-color)';
@@ -178,8 +192,81 @@ export default function PostEditor({
 
   return (
     <div className="post-editor-container">
+      {/* SECTION MÉTADONNÉES : TITRE, ENTREPRISE ET STATUT */}
+      <div className="editor-attachments-section glass-panel animate-fade-in" style={{ animationDelay: '0.05s', padding: '1.2rem' }}>
+        <div className="metadata-fields-grid">
+          
+          <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+            <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Titre de la publication</label>
+            <input 
+              type="text"
+              placeholder="Saisir un titre..."
+              value={title}
+              onChange={(e) => onChangeTitle(e.target.value)}
+              disabled={readOnly}
+              style={{
+                padding: '0.6rem 0.8rem',
+                borderRadius: 'var(--radius-md)',
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid var(--surface-border)',
+                color: 'var(--text-main)',
+                fontSize: '0.9rem',
+                fontFamily: 'inherit'
+              }}
+            />
+          </div>
+
+          <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+            <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Entreprise cliente</label>
+            <select
+              value={companyId}
+              onChange={(e) => onChangeCompanyId(e.target.value)}
+              disabled={readOnly}
+              style={{
+                padding: '0.6rem 0.8rem',
+                borderRadius: 'var(--radius-md)',
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid var(--surface-border)',
+                color: 'var(--text-main)',
+                fontSize: '0.9rem',
+                fontFamily: 'inherit'
+              }}
+            >
+              <option value="">-- Choisir une entreprise --</option>
+              {companies.map(comp => (
+                <option key={comp.id} value={comp.id}>{comp.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+            <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Statut (Kanban)</label>
+            <select
+              value={status}
+              onChange={(e) => onChangeStatus(e.target.value)}
+              disabled={readOnly}
+              style={{
+                padding: '0.6rem 0.8rem',
+                borderRadius: 'var(--radius-md)',
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid var(--surface-border)',
+                color: 'var(--text-main)',
+                fontSize: '0.9rem',
+                fontFamily: 'inherit'
+              }}
+            >
+              <option value="draft">💡 Brouillon / Idée</option>
+              <option value="validate">👀 À valider</option>
+              <option value="ready">🚀 Prêt à publier</option>
+              <option value="published">✅ Publié</option>
+            </select>
+          </div>
+
+        </div>
+      </div>
+
       {/* BLOC DE PLANIFICATION DE DATE DE PUBLICATION */}
-      <div className="editor-attachments-section glass-panel animate-fade-in" style={{ animationDelay: '0.1s', marginBottom: '1.5rem', padding: '1.2rem' }}>
+      <div className="editor-attachments-section glass-panel animate-fade-in" style={{ animationDelay: '0.1s', padding: '1.2rem' }}>
         <div className="attachments-section-header" style={{ borderBottom: 'none', paddingBottom: 0, marginBottom: '0.5rem' }}>
           <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem' }}>
             <span style={{ fontSize: '1.2rem' }}>📅</span>
@@ -360,6 +447,62 @@ export default function PostEditor({
           <button type="button" className="btn-delete" onClick={() => { handleDeleteAttachment(contextMenu.attachmentId); setContextMenu({ visible: false, x: 0, y: 0, attachmentId: null }); }}>
             🗑️ Supprimer la pièce jointe
           </button>
+        </div>
+      )}
+
+      {/* MODALE LIGHTBOX POUR LA PRÉVISUALISATION DIRECTE DES MÉDIAS */}
+      {previewMedia && (
+        <div className="media-preview-lightbox" onClick={() => setPreviewMedia(null)}>
+          <div className="lightbox-content" onClick={(e) => e.stopPropagation()}>
+            <button 
+              type="button" 
+              className="lightbox-close-btn" 
+              onClick={() => setPreviewMedia(null)}
+              title="Fermer la prévisualisation"
+            >
+              &times;
+            </button>
+            <div className="lightbox-media-wrapper">
+              {previewMedia.type?.startsWith('video/') ? (
+                previewMedia.driveId ? (
+                  <iframe 
+                    src={`https://drive.google.com/file/d/${previewMedia.driveId}/preview`}
+                    className="lightbox-video-iframe"
+                    allow="autoplay"
+                    frameBorder="0"
+                  ></iframe>
+                ) : (
+                  <video 
+                    src={previewMedia.data} 
+                    controls 
+                    autoPlay 
+                    className="lightbox-video-element"
+                  />
+                )
+              ) : (
+                <SecureMedia 
+                  src={previewMedia.data} 
+                  driveId={previewMedia.driveId} 
+                  type={previewMedia.type} 
+                  alt={previewMedia.name} 
+                  className="lightbox-image-element"
+                />
+              )}
+            </div>
+            <div className="lightbox-caption">
+              <span className="lightbox-media-name">{previewMedia.name}</span>
+              {previewMedia.driveId && (
+                <a 
+                  href={`https://drive.google.com/file/d/${previewMedia.driveId}/view?usp=drivesdk`} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="lightbox-drive-btn"
+                >
+                  Ouvrir dans Drive ↗
+                </a>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

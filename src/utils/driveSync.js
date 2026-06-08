@@ -421,6 +421,9 @@ export async function createDriveFolder(accessToken, folderName) {
  * Téléverse un fichier JSON de sauvegarde Supabase dans un dossier Google Drive spécifique.
  */
 export async function uploadBackupToDrive(accessToken, folderId, data, fileName) {
+  const isSql = fileName.endsWith('.sql');
+  const mimeType = isSql ? 'text/plain' : 'application/json';
+
   // 1. Création du fichier vide avec parents
   const createRes = await fetch(DRIVE_API_BASE, {
     method: 'POST',
@@ -431,12 +434,13 @@ export async function uploadBackupToDrive(accessToken, folderId, data, fileName)
     body: JSON.stringify({
       name: fileName,
       parents: [folderId],
-      mimeType: 'application/json'
+      mimeType: mimeType
     })
   });
   
   if (!createRes.ok) {
-    throw new Error(`Échec de création du fichier "${fileName}" sur Google Drive.`);
+    const errText = await createRes.text();
+    throw new Error(`Échec de création du fichier "${fileName}" sur Google Drive : ${createRes.status} - ${errText}`);
   }
   
   const createData = await createRes.json();
@@ -448,15 +452,51 @@ export async function uploadBackupToDrive(accessToken, folderId, data, fileName)
     method: 'PATCH',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
+      'Content-Type': mimeType
     },
-    body: JSON.stringify(data, null, 2)
+    body: isSql ? data : JSON.stringify(data, null, 2)
   });
   
   if (!uploadRes.ok) {
-    throw new Error(`Échec de téléversement du contenu de la sauvegarde.`);
+    const errText = await uploadRes.text();
+    throw new Error(`Échec de téléversement du contenu de la sauvegarde : ${uploadRes.status} - ${errText}`);
   }
   
   return fileId;
+}
+
+
+/**
+ * Rafraîchit le jeton d'accès Google Drive à l'aide du Refresh Token.
+ */
+export async function refreshGoogleAccessToken(clientId, clientSecret, refreshToken) {
+  try {
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token'
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Google OAuth Refresh error: ${response.status} - ${errText}`);
+    }
+
+    const data = await response.json();
+    return {
+      accessToken: data.access_token,
+      expiresIn: data.expires_in
+    };
+  } catch (err) {
+    console.error("Échec du rafraîchissement du token Google Drive :", err);
+    throw err;
+  }
 }
 

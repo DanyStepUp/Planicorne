@@ -17,10 +17,10 @@
 }
 
 .workspace {
-  display: grid;
-  grid-template-columns: 1.1fr 0.9fr;
+  display: flex;
+  flex-direction: column;
   gap: 2rem;
-  align-items: stretch;
+  width: 100%;
 }
 
 /* Editing Active Card Banner */

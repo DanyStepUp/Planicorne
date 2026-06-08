@@ -20,7 +20,7 @@ const PLATFORM_COLORS = {
 
 
 
-export default function CalendarView({ cards = [], onEditCard, onAddCardDirectly }) {
+export default function CalendarView({ cards = [], onEditCard, onAddCard }) {
   const [currentDate, setCurrentDate] = useState(new Date());
 
   const year = currentDate.getFullYear();
@@ -98,20 +98,12 @@ export default function CalendarView({ cards = [], onEditCard, onAddCardDirectly
 
   const handleQuickAdd = (e, cellDate) => {
     e.stopPropagation();
-    const title = prompt("Saisissez le titre de votre post :");
-    if (!title || !title.trim()) return;
-
     const scheduled = new Date(cellDate);
     scheduled.setHours(10, 0, 0, 0); // Default to 10:00 AM
 
-    onAddCardDirectly({
-      title: title.trim(),
-      content: "",
-      platform: 'linkedin',
-      status: 'draft',
+    onAddCard({
       scheduledAt: scheduled.toISOString(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      status: 'draft'
     });
   };
 

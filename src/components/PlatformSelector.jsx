@@ -1,12 +1,15 @@
 
 import { FaFacebook, FaInstagram, FaLinkedin, FaGoogle } from 'react-icons/fa';
+import { FileText, Mail } from 'lucide-react';
 import './PlatformSelector.css';
 
 const platforms = [
   { id: 'facebook', name: 'Facebook', icon: FaFacebook, color: '#1877F2' },
   { id: 'instagram', name: 'Instagram', icon: FaInstagram, color: '#E4405F' },
   { id: 'linkedin', name: 'LinkedIn', icon: FaLinkedin, color: '#0A66C2' },
-  { id: 'google', name: 'Google Posts', icon: FaGoogle, color: '#EA4335' }
+  { id: 'google', name: 'Google Posts', icon: FaGoogle, color: '#EA4335' },
+  { id: 'blog', name: 'Billet de blog', icon: FileText, color: '#6366f1' },
+  { id: 'newsletter', name: 'Newsletter', icon: Mail, color: '#10b981' }
 ];
 
 export default function PlatformSelector({ selectedPlatform, onSelectPlatform }) {
@@ -23,7 +26,7 @@ export default function PlatformSelector({ selectedPlatform, onSelectPlatform })
             onClick={() => onSelectPlatform(platform.id)}
             style={{ '--hover-color': platform.color }}
           >
-            <Icon className="platform-icon" size={24} />
+            <Icon className="platform-icon" size={18} />
             <span className="platform-name">{platform.name}</span>
             {isSelected && <div className="active-indicator" style={{ backgroundColor: platform.color }}></div>}
           </button>

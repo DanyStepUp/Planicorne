@@ -1,41 +1,42 @@
 .platform-selector {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-  margin-bottom: 2rem;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  /* Scrollbar fine pour défilement horizontal */
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-border) transparent;
 }
 
-@media (max-width: 480px) {
-  .platform-selector {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0.5rem;
-  }
+.platform-selector::-webkit-scrollbar {
+  height: 4px;
+}
+
+.platform-selector::-webkit-scrollbar-thumb {
+  background: var(--surface-border);
+  border-radius: 4px;
 }
 
 .platform-btn {
   position: relative;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 0.75rem;
-  padding: 1.5rem;
+  gap: 0.5rem;
+  padding: 0.6rem 0.9rem;
   background: var(--surface-color);
   border: 1px solid var(--surface-border);
   color: var(--text-muted);
   border-radius: var(--radius-md);
   overflow: hidden;
-}
-
-@media (max-width: 480px) {
-  .platform-btn {
-    padding: 1rem 0.5rem;
-    gap: 0.5rem;
-  }
-
-  .platform-name {
-    font-size: 0.875rem;
-  }
+  flex: 1 1 0px;
+  min-width: 125px;
+  white-space: nowrap;
+  transition: transform 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .platform-btn:hover {
@@ -52,7 +53,7 @@
 }
 
 .platform-icon {
-  transition: transform 0.3s ease;
+  transition: transform 0.2s ease;
 }
 
 .platform-btn:hover .platform-icon,
@@ -63,7 +64,7 @@
 
 .platform-name {
   font-weight: 500;
-  font-size: 1rem;
+  font-size: 0.85rem;
 }
 
 .active-indicator {
@@ -79,8 +80,14 @@
   from {
     transform: translateY(100%);
   }
-
   to {
     transform: translateY(0);
+  }
+}
+
+@media (max-width: 768px) {
+  .platform-btn {
+    flex: 0 0 auto;
+    padding: 0.5rem 0.8rem;
   }
 }

@@ -167,12 +167,23 @@ export async function fetchClients() {
 export async function fetchStepupUsers() {
   const { data, error } = await supabase
     .from('stepup_users')
-    .select('id, name, email, role');
+    .select(`
+      id, 
+      name, 
+      email, 
+      role,
+      stepup_user_companies (
+        company_id
+      )
+    `);
   
   if (error) {
     throw error;
   }
-  return data || [];
+  return (data || []).map(u => ({
+    ...u,
+    company_ids: u.stepup_user_companies ? u.stepup_user_companies.map(c => c.company_id) : []
+  }));
 }
 
 /**
@@ -297,6 +308,38 @@ export async function authenticateUser(email, password) {
 }
 
 /**
+ * Rafraîchit les données de session d'un utilisateur à partir de son ID.
+ */
+export async function refreshUserSession(userId) {
+  const { data, error } = await supabase
+    .from('app_users')
+    .select(`
+      id,
+      email,
+      password,
+      name,
+      role,
+      client_id,
+      stepup_user_id,
+      clients (
+        company_id
+      )
+    `)
+    .eq('id', userId)
+    .single();
+
+  if (error || !data) {
+    return null;
+  }
+
+  if (data.clients) {
+    data.company_id = data.clients.company_id;
+  }
+
+  return data;
+}
+
+/**
  * Récupère la liste de toutes les entreprises enregistrées (avec logos et contrats).
  */
 export async function fetchCompanies() {
@@ -360,7 +403,7 @@ export async function insertClient(client) {
 /**
  * Insère un nouvel utilisateur Step Up dans Supabase.
  */
-export async function insertStepupUser(user) {
+export async function insertStepupUser(user, companyIds = []) {
   const { data, error } = await supabase
     .from('stepup_users')
     .insert([{
@@ -374,6 +417,19 @@ export async function insertStepupUser(user) {
   if (error) {
     throw error;
   }
+
+  // Enregistrer les associations d'entreprises
+  if (companyIds && companyIds.length > 0) {
+    const rows = companyIds.map(companyId => ({
+      stepup_user_id: user.id,
+      company_id: companyId
+    }));
+    const { error: err } = await supabase
+      .from('stepup_user_companies')
+      .insert(rows);
+    if (err) console.error("Erreur d'insertion stepup_user_companies:", err);
+  }
+
   return data ? data[0] : null;
 }
 
@@ -482,7 +538,7 @@ export async function updateClient(clientId, clientData, loginData = {}) {
 /**
  * Met à jour les informations d'un collaborateur Step Up et ses identifiants associés.
  */
-export async function updateStepupUser(stepupId, stepupData, loginData = {}) {
+export async function updateStepupUser(stepupId, stepupData, loginData = {}, companyIds = []) {
   // 1. Mise à jour de la table 'stepup_users'
   const { data: user, error: userErr } = await supabase
     .from('stepup_users')
@@ -512,6 +568,31 @@ export async function updateStepupUser(stepupId, stepupData, loginData = {}) {
 
   if (appUserErr) throw appUserErr;
 
+  // 3. Mise à jour de la table de liaison stepup_user_companies
+  // Supprimer les anciennes associations
+  const { error: delErr } = await supabase
+    .from('stepup_user_companies')
+    .delete()
+    .eq('stepup_user_id', stepupId);
+  
+  if (delErr) {
+    console.error("Erreur de suppression stepup_user_companies:", delErr);
+  }
+
+  // Insérer les nouvelles associations
+  if (companyIds && companyIds.length > 0) {
+    const rows = companyIds.map(companyId => ({
+      stepup_user_id: stepupId,
+      company_id: companyId
+    }));
+    const { error: insErr } = await supabase
+      .from('stepup_user_companies')
+      .insert(rows);
+    if (insErr) {
+      console.error("Erreur d'insertion stepup_user_companies:", insErr);
+    }
+  }
+
   return user ? user[0] : null;
 }
 
@@ -520,13 +601,14 @@ export async function updateStepupUser(stepupId, stepupData, loginData = {}) {
  */
 export async function fetchAllDatabaseData() {
   try {
-    const [posts, companies, clients, stepupUsers, comments, appUsers] = await Promise.all([
+    const [posts, companies, clients, stepupUsers, comments, appUsers, stepupUserCompanies] = await Promise.all([
       supabase.from('posts').select('*'),
       supabase.from('companies').select('*'),
       supabase.from('clients').select('*'),
       supabase.from('stepup_users').select('*'),
       supabase.from('comments').select('*'),
-      supabase.from('app_users').select('*')
+      supabase.from('app_users').select('*'),
+      supabase.from('stepup_user_companies').select('*')
     ]);
 
     return {
@@ -536,7 +618,8 @@ export async function fetchAllDatabaseData() {
       clients: clients.data || [],
       stepup_users: stepupUsers.data || [],
       comments: comments.data || [],
-      app_users: appUsers.data || []
+      app_users: appUsers.data || [],
+      stepup_user_companies: stepupUserCompanies.data || []
     };
   } catch (error) {
     console.error("Erreur lors de la récupération de la base Supabase pour sauvegarde:", error);
@@ -544,3 +627,38 @@ export async function fetchAllDatabaseData() {
   }
 }
 
+/**
+ * Récupère une valeur de configuration globale depuis la table app_settings.
+ */
+export async function getSetting(key) {
+  try {
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', key)
+      .maybeSingle();
+    
+    if (error) throw error;
+    return data ? data.value : null;
+  } catch (err) {
+    console.warn(`Erreur lors de la récupération du paramètre ${key}:`, err);
+    return null;
+  }
+}
+
+/**
+ * Enregistre ou met à jour une valeur de configuration globale dans la table app_settings.
+ */
+export async function saveSetting(key, value) {
+  try {
+    const { error } = await supabase
+      .from('app_settings')
+      .upsert({ key, value: String(value) });
+    
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.error(`Erreur lors de l'enregistrement du paramètre ${key}:`, err);
+    throw err;
+  }
+}

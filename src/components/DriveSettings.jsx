@@ -1,32 +1,22 @@
 import { useState, useEffect } from 'react';
 import { 
-  FolderOpen, 
   Database, 
   Settings, 
   CheckCircle2, 
   AlertTriangle, 
-  Link, 
-  Unlink, 
   RefreshCw 
 } from 'lucide-react';
 import { 
-  saveHandleToDB, 
-  clearHandleFromDB, 
   getOrCreateDriveFolder,
   listDriveFolders,
   createDriveFolder
 } from '../utils/driveSync';
+import { saveSetting } from '../utils/supabaseService';
 import './DriveSettings.css';
 
 export default function DriveSettings({ 
-  syncMode, 
-  setSyncMode, 
-  localDirectoryName, 
-  setLocalDirectoryHandle, 
-  setLocalDirectoryName,
   cloudAccessToken,
   setCloudAccessToken,
-  cloudFolderId,
   setCloudFolderId,
   onRefreshBoard,
   supabaseConnected,
@@ -43,8 +33,11 @@ export default function DriveSettings({
   lastBackupStatus,
   onTriggerBackup
 }) {
-  const [clientId, setClientId] = useState(localStorage.getItem('gdrive_client_id') || '');
-  const [apiKey, setApiKey] = useState(localStorage.getItem('gdrive_api_key') || '');
+  const DEFAULT_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+  const DEFAULT_CLIENT_SECRET = import.meta.env.VITE_GOOGLE_CLIENT_SECRET || '';
+
+  const [clientId, setClientId] = useState(() => localStorage.getItem('gdrive_client_id') || DEFAULT_CLIENT_ID);
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('gdrive_api_key') || DEFAULT_CLIENT_SECRET);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -131,54 +124,15 @@ export default function DriveSettings({
     }
   };
 
-  // --- CONNECT DOSSIER LOCAL ---
-  const handleConnectLocalFolder = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      if (!window.showDirectoryPicker) {
-        throw new Error("Votre navigateur ne supporte pas l'accès direct aux dossiers locaux. Veuillez utiliser Google Chrome, Edge ou un autre navigateur basé sur Chromium.");
-      }
-      
-      const handle = await window.showDirectoryPicker({
-        mode: 'readwrite'
-      });
-      
-      await saveHandleToDB(handle);
-      setLocalDirectoryHandle(handle);
-      setLocalDirectoryName(handle.name);
-      setSyncMode('local_dir');
-      localStorage.setItem('sync_mode', 'local_dir');
-      
-      showFeedback('success', `Dossier "${handle.name}" connecté avec succès ! Vos posts y seront enregistrés.`);
-      onRefreshBoard();
-    } catch (err) {
-      if (err.name !== 'AbortError') {
-        showFeedback('error', err.message || "Impossible de sélectionner le dossier.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDisconnectLocalFolder = async () => {
-    try {
-      await clearHandleFromDB();
-      setLocalDirectoryHandle(null);
-      setLocalDirectoryName('');
-      setSyncMode('local');
-      localStorage.setItem('sync_mode', 'local');
-      showFeedback('success', "Dossier local déconnecté. Retour au stockage local du navigateur.");
-      onRefreshBoard();
-    } catch (err) {
-      showFeedback('error', "Erreur lors de la déconnexion du dossier local.");
-    }
-  };
+  // Local sync handles are no longer used since database is locked to Supabase.
 
   // --- GOOGLE DRIVE OAUTH CLOUD ---
   const handleConnectCloudDrive = async () => {
-    if (!clientId) {
-      showFeedback('error', "Veuillez fournir un ID Client OAuth de votre projet Google Cloud.");
+    const cId = DEFAULT_CLIENT_ID;
+    const cSec = DEFAULT_CLIENT_SECRET;
+    
+    if (!cId || !cSec) {
+      showFeedback('error', "Identifiants Google Drive OAuth manquants dans le fichier .env.");
       return;
     }
     
@@ -186,9 +140,14 @@ export default function DriveSettings({
     setError(null);
     
     try {
+      localStorage.setItem('gdrive_client_id', cId);
+      localStorage.setItem('gdrive_api_key', cSec);
+      await saveSetting('gdrive_client_id', cId);
+      await saveSetting('gdrive_api_key', cSec);
+
       const redirectUri = window.location.origin + window.location.pathname;
       const scope = 'https://www.googleapis.com/auth/drive.file';
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(scope)}&state=gdrive_auth`;
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(cId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&state=gdrive_auth&access_type=offline&prompt=consent`;
       
       localStorage.setItem('gdrive_pending_auth', 'true');
       window.location.href = authUrl;
@@ -198,32 +157,62 @@ export default function DriveSettings({
     }
   };
 
-  // Traiter le retour d'OAuth (hash URL) au chargement
+  // Traiter le retour d'OAuth (code URL) au chargement
   useEffect(() => {
-    const checkHash = async () => {
-      const hash = window.location.hash;
+    const checkQueryParams = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
       const isPending = localStorage.getItem('gdrive_pending_auth') === 'true';
       
-      if (hash && hash.includes('access_token') && isPending) {
+      if (code && isPending) {
         localStorage.removeItem('gdrive_pending_auth');
         setLoading(true);
         
-        const params = new URLSearchParams(hash.substring(1));
-        const token = params.get('access_token');
-        
-        window.history.replaceState(null, null, window.location.pathname + window.location.search);
+        // Retirer le code de la barre d'adresse
+        window.history.replaceState(null, null, window.location.pathname);
         
         try {
+          const redirectUri = window.location.origin + window.location.pathname;
+          const response = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: new URLSearchParams({
+              code: code,
+              client_id: DEFAULT_CLIENT_ID,
+              client_secret: DEFAULT_CLIENT_SECRET,
+              redirect_uri: redirectUri,
+              grant_type: 'authorization_code'
+            })
+          });
+
+          if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`Échec de l'échange de code : ${response.status} - ${errText}`);
+          }
+
+          const tokenData = await response.json();
+          const token = tokenData.access_token;
+          const refreshToken = tokenData.refresh_token;
+
           const folderId = await getOrCreateDriveFolder(token);
           
           setCloudAccessToken(token);
           setCloudFolderId(folderId);
-          setSyncMode('cloud');
           
-          localStorage.setItem('sync_mode', 'cloud');
           localStorage.setItem('gdrive_access_token', token);
+          localStorage.setItem('gdrive_token_expires_at', (Date.now() + tokenData.expires_in * 1000).toString());
+          if (refreshToken) {
+            localStorage.setItem('gdrive_refresh_token', refreshToken);
+            await saveSetting('gdrive_refresh_token', refreshToken);
+          }
           localStorage.setItem('gdrive_folder_id', folderId);
+          await saveSetting('gdrive_folder_id', folderId);
           
+          await saveSetting('gdrive_client_id', DEFAULT_CLIENT_ID);
+          await saveSetting('gdrive_api_key', DEFAULT_CLIENT_SECRET);
+
           showFeedback('success', "Connecté à Google Drive Cloud ! Le dossier 'AllPosts' a été configuré.");
           onRefreshBoard();
         } catch (err) {
@@ -234,17 +223,15 @@ export default function DriveSettings({
       }
     };
     
-    checkHash();
-  }, []);
+    checkQueryParams();
+  }, [clientId, apiKey, onRefreshBoard, setCloudAccessToken, setCloudFolderId]);
 
   const handleDisconnectCloud = () => {
     setCloudAccessToken('');
     setCloudFolderId('');
-    setSyncMode('local');
     localStorage.removeItem('gdrive_access_token');
     localStorage.removeItem('gdrive_folder_id');
-    localStorage.setItem('sync_mode', 'local');
-    showFeedback('success', "Google Drive déconnecté. Retour au stockage local.");
+    showFeedback('success', "Google Drive déconnecté.");
     onRefreshBoard();
   };
 
@@ -281,16 +268,13 @@ export default function DriveSettings({
         <div className="sync-status-card">
           <div className="status-indicator-wrapper">
             <span 
-              className={`status-dot ${syncMode === 'local' ? 'status-local' : 'status-active'}`}
-              style={syncMode === 'supabase' ? { backgroundColor: '#3ecf8e', boxShadow: '0 0 8px #3ecf8e' } : {}}
+              className="status-dot status-active"
+              style={{ backgroundColor: '#3ecf8e', boxShadow: '0 0 8px #3ecf8e' }}
             ></span>
             <div>
               <span className="status-label">Stockage actif :</span>
               <span className="status-value">
-                {syncMode === 'supabase' && "⚡ Supabase PostgreSQL Cloud"}
-                {syncMode === 'local' && "📁 Stockage Local du navigateur"}
-                {syncMode === 'local_dir' && `💻 Google Drive Local (${localDirectoryName})`}
-                {syncMode === 'cloud' && "☁️ Google Drive Cloud"}
+                ⚡ Supabase PostgreSQL Cloud ("Planicorne 2")
               </span>
             </div>
           </div>
@@ -311,15 +295,15 @@ export default function DriveSettings({
         </div>
       )}
 
-      <div className="settings-options-grid">
-        {/* OPTION SUPABASE */}
-        <div className={`option-card glass-panel ${syncMode === 'supabase' ? 'active' : ''}`} style={syncMode === 'supabase' ? { borderColor: '#3ecf8e' } : {}}>
+      <div className="settings-options-grid" style={{ gridTemplateColumns: '1fr', maxWidth: '600px', margin: '0 auto' }}>
+        {/* OPTION SUPABASE UNIQUE */}
+        <div className="option-card glass-panel active" style={{ borderColor: '#3ecf8e' }}>
           <div className="option-icon-wrapper" style={{ backgroundColor: '#3ecf8e', color: 'white' }}>
             <Database size={24} />
           </div>
-          <h3>Supabase PostgreSQL (Recommandé)</h3>
+          <h3>Supabase PostgreSQL (Unique)</h3>
           <p className="option-desc">
-            Base de données PostgreSQL cloud sécurisée. Vos posts et pièces jointes sont stockés en temps réel et accessibles partout.
+            Base de données PostgreSQL cloud sécurisée. Vos posts et commentaires sont stockés en temps réel et accessibles partout en toute sécurité.
           </p>
           <div className="option-benefits">
             <div className="benefit-item">
@@ -338,17 +322,11 @@ export default function DriveSettings({
           <div className="action-area" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: 'auto', width: '100%' }}>
             <div style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
               <button 
-                className={`btn-option ${syncMode === 'supabase' ? 'btn-active' : 'btn-secondary'}`}
-                style={{ flex: 1, backgroundColor: syncMode === 'supabase' ? '#3ecf8e' : '', borderColor: syncMode === 'supabase' ? '#3ecf8e' : '', color: syncMode === 'supabase' ? '#000' : '' }}
-                onClick={() => {
-                  setSyncMode('supabase');
-                  localStorage.setItem('sync_mode', 'supabase');
-                  showFeedback('success', "Base de données Supabase activée.");
-                  onRefreshBoard();
-                }}
-                disabled={syncMode === 'supabase'}
+                className="btn-option btn-active"
+                style={{ flex: 1, backgroundColor: '#3ecf8e', borderColor: '#3ecf8e', color: '#000' }}
+                disabled={true}
               >
-                {syncMode === 'supabase' ? "Mode actif" : "Activer ce mode"}
+                Stockage principal actif
               </button>
               
               <button 
@@ -372,131 +350,6 @@ export default function DriveSettings({
             )}
           </div>
         </div>
-
-        {/* OPTION 1 : STOCKAGE LOCAL */}
-        <div className={`option-card glass-panel ${syncMode === 'local' ? 'active' : ''}`}>
-          <div className="option-icon-wrapper local-bg">
-            <Database size={24} />
-          </div>
-          <h3>Stockage Local du navigateur</h3>
-          <p className="option-desc">
-            Vos posts sont stockés de manière sécurisée dans la mémoire cache locale de votre navigateur (LocalStorage).
-          </p>
-          <div className="option-benefits">
-            <div className="benefit-item">⚡ Ultra-rapide et fonctionne hors-ligne</div>
-            <div className="benefit-item">🛡️ Aucune connexion ou compte requis</div>
-            <div className="benefit-item">⚠️ Attention : Données perdues si le cache est vidé</div>
-          </div>
-          <button 
-            className={`btn-option ${syncMode === 'local' ? 'btn-active' : 'btn-secondary'}`}
-            onClick={() => {
-              setSyncMode('local');
-              localStorage.setItem('sync_mode', 'local');
-              showFeedback('success', "Stockage local activé.");
-              onRefreshBoard();
-            }}
-            disabled={syncMode === 'local'}
-          >
-            {syncMode === 'local' ? "Mode actif" : "Activer ce mode"}
-          </button>
-        </div>
-
-        {/* OPTION 2 : DOSSIER DRIVE LOCAL */}
-        <div className={`option-card glass-panel ${syncMode === 'local_dir' ? 'active' : ''}`}>
-          <div className="option-icon-wrapper drive-bg">
-            <FolderOpen size={24} />
-          </div>
-          <h3>Google Drive Local (Legacy)</h3>
-          <p className="option-desc">
-            L'application écrit des fichiers `.json` individuels dans un dossier de votre ordinateur qui se synchronise via Google Drive Desktop.
-          </p>
-          <div className="option-benefits">
-            <div className="benefit-item">☁️ Synchronisation transparente via Google Drive Desktop</div>
-            <div className="benefit-item">🔑 Sans compte de développeur</div>
-            <div className="benefit-item">📁 Fichiers lisibles en clair sur l'ordinateur</div>
-          </div>
-
-          <div className="action-area">
-            {syncMode === 'local_dir' ? (
-              <div className="connected-folder-info">
-                <div className="folder-name-display">
-                  <CheckCircle2 size={16} className="color-success" />
-                  <span>Dossier : <strong>{localDirectoryName}</strong></span>
-                </div>
-                <div className="btn-group-row">
-                  <button className="btn-action-small" onClick={handleConnectLocalFolder} disabled={loading}>
-                    <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Changer
-                  </button>
-                  <button className="btn-action-small btn-danger-small" onClick={handleDisconnectLocalFolder}>
-                    <Unlink size={14} /> Déconnecter
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button className="btn-option btn-primary" onClick={handleConnectLocalFolder} disabled={loading}>
-                <Link size={18} /> Sélectionner le dossier local
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* SECTION GOOGLE DRIVE AUTHENTICATION CLOUD */}
-      <div className="glass-panel" style={{ marginTop: '2rem', padding: '1.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-          <RefreshCw className="color-primary" size={24} style={{ color: 'var(--primary-color)' }} />
-          <h3 style={{ margin: 0 }}>Connexion Google Drive Cloud (OAuth)</h3>
-        </div>
-        <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
-          Configurez les clés Google API de votre projet Cloud pour activer la sauvegarde automatique ou le mode Cloud direct.
-        </p>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
-          <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-            <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>ID Client OAuth Google</label>
-            <input 
-              type="text" 
-              placeholder="Ex: xxxxxxx.apps.googleusercontent.com"
-              value={clientId} 
-              onChange={(e) => setClientId(e.target.value)}
-              style={{ padding: '0.6rem 0.85rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--surface-border)', background: 'rgba(255,255,255,0.02)', color: 'var(--text-main)' }}
-            />
-          </div>
-          <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-            <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>Clé API Google Drive</label>
-            <input 
-              type="password" 
-              placeholder="Ex: AIzaSyDxxxxxxxxx"
-              value={apiKey} 
-              onChange={(e) => setApiKey(e.target.value)}
-              style={{ padding: '0.6rem 0.85rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--surface-border)', background: 'rgba(255,255,255,0.02)', color: 'var(--text-main)' }}
-            />
-          </div>
-        </div>
-
-        {cloudAccessToken ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.2)', padding: '0.85rem 1rem', borderRadius: 'var(--radius-md)', gap: '1rem', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.85rem', color: '#10b981', fontWeight: 600 }}>✓ Session Google Drive active</span>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <button 
-                type="button"
-                className="btn-option" 
-                style={{ backgroundColor: 'rgba(25, 140, 204, 0.1)', color: 'var(--primary-color)', border: '1px solid var(--primary-color)', padding: '0.4rem 1rem', fontSize: '0.85rem', cursor: 'pointer', borderRadius: 'var(--radius-sm)' }} 
-                onClick={handleTestCloudConnection}
-                disabled={testingCloudConnection}
-              >
-                {testingCloudConnection ? "Test en cours..." : "Tester la connexion"}
-              </button>
-              <button className="btn-grant-permission" style={{ backgroundColor: '#ef4444', color: 'white', padding: '0.4rem 1rem', marginTop: 0 }} onClick={handleDisconnectCloud}>
-                Déconnecter
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button className="btn-primary-admin" style={{ marginTop: 0, padding: '0.65rem 1.5rem', width: 'auto' }} onClick={handleConnectCloudDrive} disabled={loading}>
-            Connecter Google Drive Cloud
-          </button>
-        )}
       </div>
 
       {/* SECTION SAUVEGARDE AUTOMATIQUE SUPABASE */}
@@ -511,14 +364,41 @@ export default function DriveSettings({
         </p>
 
         {!cloudAccessToken ? (
-          <div className="backup-warning-box" style={{ background: 'rgba(245, 158, 11, 0.05)', border: '1px solid rgba(245, 158, 11, 0.2)', padding: '1rem', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <span style={{ fontSize: '1.25rem' }}>⚠️</span>
-            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              <strong>Google Drive n'est pas connecté.</strong> Bien que vous ayez renseigné l'ID Client et la Clé API, vous devez cliquer sur le bouton <strong>"Connecter Google Drive Cloud"</strong> ci-dessus pour lancer l'authentification OAuth et obtenir le jeton de connexion.
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--surface-border)', padding: '1.5rem', borderRadius: 'var(--radius-md)', alignItems: 'center', textAlign: 'center' }}>
+            <span style={{ fontSize: '2rem' }}>☁️</span>
+            <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+              Pour configurer et planifier les sauvegardes automatiques de la base de données Supabase, vous devez d'abord associer votre compte Google Drive.
             </div>
+            <button 
+              className="btn-primary-admin" 
+              style={{ marginTop: '0.5rem', padding: '0.65rem 1.5rem', width: 'auto' }} 
+              onClick={handleConnectCloudDrive} 
+              disabled={loading}
+            >
+              {loading ? "Redirection..." : "Associer mon compte Google Drive"}
+            </button>
           </div>
         ) : (
           <div className="backup-config-area" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            {/* STATUT DE CONNEXION ACTIVE INTÉGRÉ */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.2)', padding: '0.85rem 1rem', borderRadius: 'var(--radius-md)', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+              <span style={{ fontSize: '0.85rem', color: '#10b981', fontWeight: 600 }}>✓ Session Google Drive active</span>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button 
+                  type="button"
+                  className="btn-option" 
+                  style={{ backgroundColor: 'rgba(25, 140, 204, 0.1)', color: 'var(--primary-color)', border: '1px solid var(--primary-color)', padding: '0.4rem 1rem', fontSize: '0.85rem', cursor: 'pointer', borderRadius: 'var(--radius-sm)' }} 
+                  onClick={handleTestCloudConnection}
+                  disabled={testingCloudConnection}
+                >
+                  {testingCloudConnection ? "Test en cours..." : "Tester la connexion"}
+                </button>
+                <button className="btn-grant-permission" style={{ backgroundColor: '#ef4444', color: 'white', padding: '0.4rem 1rem', marginTop: 0 }} onClick={handleDisconnectCloud}>
+                  Déconnecter
+                </button>
+              </div>
+            </div>
+
             {/* TOGGLE */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid var(--surface-border)' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>

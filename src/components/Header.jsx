@@ -1,5 +1,5 @@
 
-import { Moon, Sun, Columns, Cloud, FolderOpen, Database, LogOut, User, Calendar, Users } from 'lucide-react';
+import { Moon, Sun, Columns, Database, LogOut, User, Calendar, Users } from 'lucide-react';
 import './Header.css';
 
 export default function Header({
@@ -7,65 +7,36 @@ export default function Header({
   toggleTheme,
   activeTab,
   setActiveTab,
-  syncMode,
-  localDirectoryName,
   supabaseConnected,
   supabaseTableExists,
   currentUser,
   onLogout
 }) {
   const getSyncBadge = () => {
-    switch (syncMode) {
-      case 'supabase':
-        if (supabaseConnected) {
-          return (
-            <div className="header-sync-badge sync-supabase" title="Connecté à Supabase PostgreSQL">
-              <Database size={14} />
-              <span className="badge-text">Supabase</span>
-              <span className="badge-led led-green"></span>
-            </div>
-          );
-        } else if (!supabaseTableExists) {
-          return (
-            <div className="header-sync-badge sync-supabase-error" title="Table 'posts' manquante sur Supabase">
-              <Database size={14} />
-              <span className="badge-text" style={{ maxWidth: '140px' }}>Table posts manquante</span>
-              <span className="badge-led led-red"></span>
-            </div>
-          );
-        } else {
-          return (
-            <div className="header-sync-badge sync-supabase-error" title="Connexion Supabase échouée / en cours">
-              <Database size={14} />
-              <span className="badge-text">Supabase Déconnecté</span>
-              <span className="badge-led led-red"></span>
-            </div>
-          );
-        }
-      case 'local_dir':
-        return (
-          <div className="header-sync-badge sync-local-dir" title={`Synchronisé localement : ${localDirectoryName}`}>
-            <FolderOpen size={14} />
-            <span className="badge-text">{localDirectoryName}</span>
-            <span className="badge-led led-green"></span>
-          </div>
-        );
-      case 'cloud':
-        return (
-          <div className="header-sync-badge sync-cloud" title="Connecté à Google Drive Cloud">
-            <Cloud size={14} />
-            <span className="badge-text">Drive Cloud</span>
-            <span className="badge-led led-green"></span>
-          </div>
-        );
-      default:
-        return (
-          <div className="header-sync-badge sync-local" title="Stockage Local (Navigateur uniquement)">
-            <Database size={14} />
-            <span className="badge-text">Stockage Local</span>
-            <span className="badge-led led-amber"></span>
-          </div>
-        );
+    if (supabaseConnected) {
+      return (
+        <div className="header-sync-badge sync-supabase" title="Connecté à Supabase PostgreSQL">
+          <Database size={14} />
+          <span className="badge-text">Supabase</span>
+          <span className="badge-led led-green"></span>
+        </div>
+      );
+    } else if (!supabaseTableExists) {
+      return (
+        <div className="header-sync-badge sync-supabase-error" title="Table 'posts' manquante sur Supabase">
+          <Database size={14} />
+          <span className="badge-text" style={{ maxWidth: '140px' }}>Table posts manquante</span>
+          <span className="badge-led led-red"></span>
+        </div>
+      );
+    } else {
+      return (
+        <div className="header-sync-badge sync-supabase-error" title="Connexion Supabase échouée / en cours">
+          <Database size={14} />
+          <span className="badge-text">Supabase Déconnecté</span>
+          <span className="badge-led led-red"></span>
+        </div>
+      );
     }
   };
 

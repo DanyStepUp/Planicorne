@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { MessageSquare, Send, Calendar } from 'lucide-react';
 import { getCommentsForPost, insertComment } from '../utils/supabaseService';
 import './CommentsSection.css';
@@ -8,6 +8,13 @@ export default function CommentsSection({ postId, clients = [], stepupUsers = []
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
+
+  // États pour le menu d'autocomplétion / tag @
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestionQuery, setSuggestionQuery] = useState('');
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [cursorPos, setCursorPos] = useState(0);
+  const textareaRef = useRef(null);
   
   // Selected author profile
   const [selectedAuthor] = useState(() => {
@@ -35,8 +42,8 @@ export default function CommentsSection({ postId, clients = [], stepupUsers = []
     }
   }, [postId]);
 
-  const [notifiedCommentIds, setNotifiedCommentIds] = useState(new Set());
-  const [isFirstLoad, setIsFirstLoad] = useState(true);
+  const notifiedCommentIds = useRef(new Set());
+  const isFirstLoad = useRef(true);
 
   // Request browser notification permission on mount
   useEffect(() => {
@@ -50,16 +57,15 @@ export default function CommentsSection({ postId, clients = [], stepupUsers = []
   // Monitor new comments for @+prénom mentions
   useEffect(() => {
     if (comments.length > 0 && currentUser) {
-      if (isFirstLoad) {
+      if (isFirstLoad.current) {
         // Initialize notified IDs with existing comments to prevent notification spam on first load
-        const ids = new Set(comments.map(c => c.id));
-        setNotifiedCommentIds(ids);
-        setIsFirstLoad(false);
+        comments.forEach(c => notifiedCommentIds.current.add(c.id));
+        isFirstLoad.current = false;
       } else {
         const currentFirstName = currentUser.name?.split(' ')[0]?.toLowerCase();
         if (currentFirstName) {
           comments.forEach(c => {
-            if (!notifiedCommentIds.has(c.id)) {
+            if (!notifiedCommentIds.current.has(c.id)) {
               const mentionText = `@+${currentFirstName}`;
               const isOwnComment = c.authorName === currentUser.name;
               
@@ -76,21 +82,17 @@ export default function CommentsSection({ postId, clients = [], stepupUsers = []
                 }
               }
               
-              setNotifiedCommentIds(prev => {
-                const next = new Set(prev);
-                next.add(c.id);
-                return next;
-              });
+              notifiedCommentIds.current.add(c.id);
             }
           });
         }
       }
     }
-  }, [comments, currentUser, isFirstLoad, notifiedCommentIds]);
+  }, [comments, currentUser]);
 
   useEffect(() => {
-    setIsFirstLoad(true);
-    setNotifiedCommentIds(new Set());
+    isFirstLoad.current = true;
+    notifiedCommentIds.current = new Set();
     const t = setTimeout(() => {
       loadComments();
     }, 0);
@@ -113,6 +115,93 @@ export default function CommentsSection({ postId, clients = [], stepupUsers = []
       alert("Erreur lors de l'envoi du commentaire. Assurez-vous d'avoir exécuté la migration SQL.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Liste des suggestions disponibles pour le tag @
+  const getSuggestions = useCallback(() => {
+    if (!currentUser) return [];
+    const role = currentUser.role?.trim().toLowerCase();
+
+    let list = role === 'client'
+      ? stepupUsers
+          .filter(u => u.company_ids && u.company_ids.includes(currentUser.company_id))
+          .map(u => ({ id: u.id, name: u.name, type: 'stepup', sub: u.role }))
+      : [
+          ...stepupUsers.map(u => ({ id: u.id, name: u.name, type: 'stepup', sub: u.role })),
+          ...clients.map(c => ({ id: c.id, name: c.name, type: 'client', sub: c.companies?.name || 'Client' }))
+        ];
+
+    if (suggestionQuery) {
+      list = list.filter(item => item.name.toLowerCase().includes(suggestionQuery));
+    }
+    return list;
+  }, [currentUser, stepupUsers, clients, suggestionQuery]);
+
+  const handleSelectSuggestion = (item) => {
+    const textBeforeAt = newComment.substring(0, cursorPos);
+    const textAfterCursor = newComment.substring(textareaRef.current?.selectionStart || cursorPos);
+
+    // Formater la mention : @+prenom (pour matcher le détecteur de notification natif)
+    const firstName = item.name.split(' ')[0].toLowerCase();
+    const tag = `@+${firstName} `;
+
+    const value = textBeforeAt + tag + textAfterCursor;
+    setNewComment(value);
+    setShowSuggestions(false);
+
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        const newCursorPos = cursorPos + tag.length;
+        textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+      }
+    }, 0);
+  };
+
+  const handleTextareaChange = (e) => {
+    const value = e.target.value;
+    setNewComment(value);
+
+    const selectionStart = e.target.selectionStart;
+    const textBeforeCursor = value.substring(0, selectionStart);
+    const lastAtOffset = textBeforeCursor.lastIndexOf('@');
+
+    if (lastAtOffset !== -1) {
+      const isStartOrHasSpace = lastAtOffset === 0 || 
+                                textBeforeCursor.charAt(lastAtOffset - 1) === ' ' || 
+                                textBeforeCursor.charAt(lastAtOffset - 1) === '\n';
+      const textAfterAt = textBeforeCursor.substring(lastAtOffset + 1);
+
+      if (isStartOrHasSpace && !textAfterAt.includes(' ') && !textAfterAt.includes('\n')) {
+        setSuggestionQuery(textAfterAt.toLowerCase());
+        setShowSuggestions(true);
+        setCursorPos(lastAtOffset);
+        setSelectedIndex(0);
+        return;
+      }
+    }
+    setShowSuggestions(false);
+  };
+
+  const handleKeyDown = (e) => {
+    if (!showSuggestions) return;
+
+    const currentSuggestions = getSuggestions();
+    if (currentSuggestions.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSelectedIndex(prev => (prev + 1) % currentSuggestions.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedIndex(prev => (prev - 1 + currentSuggestions.length) % currentSuggestions.length);
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      handleSelectSuggestion(currentSuggestions[selectedIndex]);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setShowSuggestions(false);
     }
   };
 
@@ -193,12 +282,64 @@ export default function CommentsSection({ postId, clients = [], stepupUsers = []
           </strong>
         </div>
 
+        {showSuggestions && getSuggestions().length > 0 && (
+          <div className="mention-suggestions-dropdown glass-panel" style={{
+            position: 'absolute',
+            bottom: '100%',
+            left: '0',
+            right: '0',
+            maxHeight: '180px',
+            overflowY: 'auto',
+            background: 'var(--surface-color)',
+            border: '1px solid var(--surface-border)',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: '0 -4px 20px rgba(0,0,0,0.25)',
+            zIndex: 50,
+            marginBottom: '0.5rem',
+            display: 'flex',
+            flexDirection: 'column',
+            padding: '0.25rem'
+          }}>
+            {getSuggestions().map((item, index) => (
+              <div
+                key={item.id}
+                onClick={() => handleSelectSuggestion(item)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '0.5rem 0.75rem',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  background: index === selectedIndex ? 'var(--primary-color)' : 'transparent',
+                  color: index === selectedIndex ? '#ffffff' : 'var(--text-main)',
+                  fontSize: '0.85rem'
+                }}
+                onMouseEnter={() => setSelectedIndex(index)}
+              >
+                <span style={{ fontWeight: 600 }}>{item.name}</span>
+                <span style={{ 
+                  fontSize: '0.75rem', 
+                  color: index === selectedIndex ? 'rgba(255,255,255,0.7)' : 'var(--text-muted)',
+                  background: index === selectedIndex ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.03)',
+                  padding: '0.05rem 0.35rem',
+                  borderRadius: '4px'
+                }}>
+                  {item.sub}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="comment-input-row">
           <textarea
+            ref={textareaRef}
             className="comment-textarea"
-            placeholder="Écrivez un commentaire..."
+            placeholder="Écrivez un commentaire... (utilisez @ pour mentionner)"
             value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
+            onChange={handleTextareaChange}
+            onKeyDown={handleKeyDown}
             required
             rows={2}
           />
