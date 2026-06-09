@@ -15,7 +15,7 @@ export default function CommentsSection({ postId, clients = [], stepupUsers = []
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [cursorPos, setCursorPos] = useState(0);
   const textareaRef = useRef(null);
-  
+
   // Selected author profile
   const [selectedAuthor] = useState(() => {
     if (currentUser) {
@@ -68,7 +68,7 @@ export default function CommentsSection({ postId, clients = [], stepupUsers = []
             if (!notifiedCommentIds.current.has(c.id)) {
               const mentionText = `@+${currentFirstName}`;
               const isOwnComment = c.authorName === currentUser.name;
-              
+
               if (c.content.toLowerCase().includes(mentionText) && !isOwnComment) {
                 if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
                   try {
@@ -81,7 +81,7 @@ export default function CommentsSection({ postId, clients = [], stepupUsers = []
                   }
                 }
               }
-              
+
               notifiedCommentIds.current.add(c.id);
             }
           });
@@ -102,10 +102,10 @@ export default function CommentsSection({ postId, clients = [], stepupUsers = []
   const handleSubmitComment = async (e) => {
     e.preventDefault();
     if (!newComment.trim() || !selectedAuthor) return;
-    
+
     setLoading(true);
     const [authorType, authorId] = selectedAuthor.split(':');
-    
+
     try {
       await insertComment(postId, authorId, authorType, newComment.trim());
       setNewComment('');
@@ -125,12 +125,12 @@ export default function CommentsSection({ postId, clients = [], stepupUsers = []
 
     let list = role === 'client'
       ? stepupUsers
-          .filter(u => u.company_ids && u.company_ids.includes(currentUser.company_id))
-          .map(u => ({ id: u.id, name: u.name, type: 'stepup', sub: u.role }))
+        .filter(u => u.company_ids && u.company_ids.includes(currentUser.company_id))
+        .map(u => ({ id: u.id, name: u.name, type: 'stepup', sub: u.role }))
       : [
-          ...stepupUsers.map(u => ({ id: u.id, name: u.name, type: 'stepup', sub: u.role })),
-          ...clients.map(c => ({ id: c.id, name: c.name, type: 'client', sub: c.companies?.name || 'Client' }))
-        ];
+        ...stepupUsers.map(u => ({ id: u.id, name: u.name, type: 'stepup', sub: u.role })),
+        ...clients.map(c => ({ id: c.id, name: c.name, type: 'client', sub: c.companies?.name || 'Client' }))
+      ];
 
     if (suggestionQuery) {
       list = list.filter(item => item.name.toLowerCase().includes(suggestionQuery));
@@ -168,9 +168,9 @@ export default function CommentsSection({ postId, clients = [], stepupUsers = []
     const lastAtOffset = textBeforeCursor.lastIndexOf('@');
 
     if (lastAtOffset !== -1) {
-      const isStartOrHasSpace = lastAtOffset === 0 || 
-                                textBeforeCursor.charAt(lastAtOffset - 1) === ' ' || 
-                                textBeforeCursor.charAt(lastAtOffset - 1) === '\n';
+      const isStartOrHasSpace = lastAtOffset === 0 ||
+        textBeforeCursor.charAt(lastAtOffset - 1) === ' ' ||
+        textBeforeCursor.charAt(lastAtOffset - 1) === '\n';
       const textAfterAt = textBeforeCursor.substring(lastAtOffset + 1);
 
       if (isStartOrHasSpace && !textAfterAt.includes(' ') && !textAfterAt.includes('\n')) {
@@ -209,11 +209,11 @@ export default function CommentsSection({ postId, clients = [], stepupUsers = []
     if (!dateStr) return '';
     try {
       const date = new Date(dateStr);
-      return date.toLocaleDateString('fr-FR', { 
-        day: '2-digit', 
-        month: 'short', 
-        hour: '2-digit', 
-        minute: '2-digit' 
+      return date.toLocaleDateString('fr-FR', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit'
       });
     } catch {
       return dateStr;
@@ -222,7 +222,7 @@ export default function CommentsSection({ postId, clients = [], stepupUsers = []
 
   const getAuthorDisplay = () => {
     if (!currentUser) return '';
-    const detail = currentUser.role?.trim().toLowerCase() === 'client' 
+    const detail = currentUser.role?.trim().toLowerCase() === 'client'
       ? (clients.find(c => c.id === currentUser.client_id)?.companies?.name || 'Client')
       : (stepupUsers.find(u => u.id === currentUser.stepup_user_id)?.role || 'Équipe Step Up');
     return `${currentUser.name} (${detail})`;
@@ -318,8 +318,8 @@ export default function CommentsSection({ postId, clients = [], stepupUsers = []
                 onMouseEnter={() => setSelectedIndex(index)}
               >
                 <span style={{ fontWeight: 600 }}>{item.name}</span>
-                <span style={{ 
-                  fontSize: '0.75rem', 
+                <span style={{
+                  fontSize: '0.75rem',
                   color: index === selectedIndex ? 'rgba(255,255,255,0.7)' : 'var(--text-muted)',
                   background: index === selectedIndex ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.03)',
                   padding: '0.05rem 0.35rem',
@@ -343,9 +343,9 @@ export default function CommentsSection({ postId, clients = [], stepupUsers = []
             required
             rows={2}
           />
-          <button 
-            type="submit" 
-            className="btn-send-comment" 
+          <button
+            type="submit"
+            className="btn-send-comment"
             disabled={loading || !newComment.trim()}
             title="Envoyer le commentaire"
           >

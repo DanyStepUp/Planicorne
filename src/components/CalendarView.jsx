@@ -20,8 +20,17 @@ const PLATFORM_COLORS = {
 
 
 
-export default function CalendarView({ cards = [], onEditCard, onAddCard }) {
+export default function CalendarView({ 
+  cards = [], 
+  onEditCard, 
+  onAddCard,
+  companies = [],
+  selectedCompanyFilter = 'all',
+  setSelectedCompanyFilter,
+  currentUser
+}) {
   const [currentDate, setCurrentDate] = useState(new Date());
+  const isClient = currentUser?.role?.trim().toLowerCase() === 'client';
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -92,7 +101,13 @@ export default function CalendarView({ cards = [], onEditCard, onAddCard }) {
     return cards.filter(card => {
       if (!card.scheduledAt) return false;
       const cardDate = new Date(card.scheduledAt);
-      return cardDate.toDateString() === cellStr;
+      if (cardDate.toDateString() !== cellStr) return false;
+
+      // Filter by company/client
+      if (!isClient && selectedCompanyFilter !== 'all' && card.company_id !== selectedCompanyFilter) {
+        return false;
+      }
+      return true;
     });
   };
 
@@ -103,7 +118,8 @@ export default function CalendarView({ cards = [], onEditCard, onAddCard }) {
 
     onAddCard({
       scheduledAt: scheduled.toISOString(),
-      status: 'draft'
+      status: 'draft',
+      company_id: selectedCompanyFilter !== 'all' ? selectedCompanyFilter : (companies.length > 0 ? companies[0].id : '')
     });
   };
 
@@ -114,6 +130,36 @@ export default function CalendarView({ cards = [], onEditCard, onAddCard }) {
           <CalendarIcon size={22} className="calendar-title-icon" />
           <h2>{monthNames[month]} {year}</h2>
         </div>
+
+        {/* FILTRE PAR CLIENT EN MODE MENU DEROULANT */}
+        {!isClient && companies && companies.length > 0 && (
+          <div className="calendar-company-filter" style={{ minWidth: '220px' }}>
+            <select
+              value={selectedCompanyFilter}
+              onChange={(e) => setSelectedCompanyFilter(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.55rem 1rem',
+                borderRadius: 'var(--radius-md)',
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid var(--surface-border)',
+                color: 'var(--text-main)',
+                fontSize: '0.85rem',
+                fontWeight: '500',
+                outline: 'none',
+                cursor: 'pointer',
+                transition: 'var(--transition)'
+              }}
+            >
+              <option value="all" style={{ background: 'var(--surface-color)' }}>🏢 Tous les clients</option>
+              {companies.map(comp => (
+                <option key={comp.id} value={comp.id} style={{ background: 'var(--surface-color)' }}>
+                  🏢 {comp.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         
         <div className="calendar-nav-buttons">
           <button className="btn-cal-nav" onClick={handlePrevMonth} title="Mois précédent">

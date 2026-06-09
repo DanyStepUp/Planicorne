@@ -1,22 +1,22 @@
 import { useState, useEffect } from 'react';
+import { getMediaUrl, revokeMediaUrl } from '../utils/MediaCacheService';
 
 /**
  * Component to securely render images and videos from Google Drive
- * or fallback URLs. It uses the access token if present to retrieve
- * the file's temporary public thumbnail from Google Drive API.
+ * or fallback URLs. It utilizes the MediaCacheService to fetch and cache
+ * media locally (Cache Storage in browser or Filesystem on native mobile)
+ * and displays them securely using local Object URLs.
  */
-export default function SecureMedia({ src, driveId, type, className, alt, style, isVideoPlayer = false }) {
+export default function SecureMedia({ src, driveId, type, className, alt, style, isVideoPlayer = false, onLoad }) {
   const [mimeType, setMimeType] = useState(type || '');
   const [mediaUrl, setMediaUrl] = useState(() => {
     if (!driveId) return src || '';
-    const token = localStorage.getItem('gdrive_access_token');
-    if (!token) {
-      if (isVideoPlayer && mimeType?.startsWith('video/')) {
-        return `https://drive.google.com/file/d/${driveId}/preview`;
-      }
-      return src || `https://lh3.googleusercontent.com/d/${driveId}`;
+    
+    // Return a direct public preview URL initially to prevent blank images and empty src warnings
+    if (isVideoPlayer && mimeType?.startsWith('video/')) {
+      return `https://drive.google.com/file/d/${driveId}/preview`;
     }
-    return '';
+    return src || `https://drive.google.com/thumbnail?sz=w1000&id=${driveId}`;
   });
 
   useEffect(() => {
@@ -26,63 +26,43 @@ export default function SecureMedia({ src, driveId, type, className, alt, style,
     }
 
     const token = localStorage.getItem('gdrive_access_token');
-    
-    // Fallback if no token is available
-    if (!token) {
-      const t = setTimeout(() => {
-        if (isVideoPlayer && mimeType?.startsWith('video/')) {
-          setMediaUrl(`https://drive.google.com/file/d/${driveId}/preview`);
-        } else {
-          setMediaUrl(src || `https://lh3.googleusercontent.com/d/${driveId}`);
-        }
-      }, 0);
-      return () => clearTimeout(t);
-    }
-
     let isMounted = true;
 
-    const fetchMetadata = async () => {
+    const loadMedia = async () => {
       try {
-        const response = await fetch(`https://www.googleapis.com/drive/v3/files/${driveId}?fields=thumbnailLink,mimeType`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+        // Resolve cached or fetched local object URL
+        const resolvedUrl = await getMediaUrl(driveId, token, {
+          mimeType: mimeType,
+          isVideo: isVideoPlayer,
+          useThumbnail: true // Use high-res thumbnail for faster loading/saving quota
         });
 
-        if (!response.ok) {
-          throw new Error('Failed to fetch Drive metadata');
-        }
-
-        const data = await response.json();
-        
         if (isMounted) {
-          if (data.mimeType) {
-            setMimeType(data.mimeType);
-          }
-
-          if (isVideoPlayer && data.mimeType?.startsWith('video/')) {
-            setMediaUrl(`https://drive.google.com/file/d/${driveId}/preview`);
-          } else if (data.thumbnailLink) {
-            // Replace the size parameter in the thumbnail link to get a high-quality preview (s1000)
-            const highRes = data.thumbnailLink.replace(/=s\d+/, '=s1000');
-            setMediaUrl(highRes);
-          } else {
-            setMediaUrl(`https://lh3.googleusercontent.com/d/${driveId}`);
+          setMediaUrl(resolvedUrl);
+          
+          // Try to guess/extract the mimeType if it was empty, from the blob URL or service
+          if (!mimeType) {
+            // Check if drive file is video by calling standard preview logic if needed
+            if (resolvedUrl.includes('preview')) {
+              setMimeType('video/mp4');
+            }
           }
         }
-      } catch (e) {
-        console.error("Error loading secure media:", e);
+      } catch (err) {
+        console.debug("Info loading secure cached media fallback:", err.message);
         if (isMounted) {
-          // Fallback to standard Google Photos CDN / Direct URL
-          setMediaUrl(src || `https://lh3.googleusercontent.com/d/${driveId}`);
+          // Fallback to direct public CDN link if caching/fetching fails
+          setMediaUrl(src || `https://drive.google.com/thumbnail?sz=w1000&id=${driveId}`);
         }
       }
     };
 
-    fetchMetadata();
+    loadMedia();
 
     return () => {
       isMounted = false;
+      // Revoke the object URL to prevent memory leaks when component unmounts
+      revokeMediaUrl(driveId);
     };
   }, [driveId, src, isVideoPlayer, mimeType]);
 
@@ -104,12 +84,20 @@ export default function SecureMedia({ src, driveId, type, className, alt, style,
       alt={alt} 
       className={className} 
       style={style} 
+      onLoad={(e) => {
+        if (onLoad) {
+          onLoad({
+            width: e.target.naturalWidth,
+            height: e.target.naturalHeight
+          });
+        }
+      }}
       onError={(e) => {
-        // Fallbacks if Google rejects the thumbnail link
+        // Fallbacks if Google rejects the thumbnail link or blob fails
         if (src && e.target.src !== src) {
           e.target.src = src;
-        } else if (driveId && e.target.src !== `https://drive.google.com/thumbnail?sz=w800&id=${driveId}`) {
-          e.target.src = `https://drive.google.com/thumbnail?sz=w800&id=${driveId}`;
+        } else if (driveId && e.target.src !== `https://drive.google.com/thumbnail?sz=w1000&id=${driveId}`) {
+          e.target.src = `https://drive.google.com/thumbnail?sz=w1000&id=${driveId}`;
         }
       }}
     />

@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { FileText, Trash2, Paperclip } from 'lucide-react';
 import SecureMedia from './SecureMedia';
 import './PostEditor.css';
@@ -34,6 +35,54 @@ export default function PostEditor({
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, attachmentId: null });
   const [linkUrl, setLinkUrl] = useState('');
   const [previewMedia, setPreviewMedia] = useState(null);
+
+  const enrichmentAttempts = useRef(new Set());
+
+  // Enrich attachments that are missing metadata (real name, size, dimensions) on load or update
+  useEffect(() => {
+    const token = localStorage.getItem('gdrive_access_token');
+    if (!token || readOnly) return;
+
+    // Find Drive attachments that need enrichment
+    const pendingEnrichment = attachments.filter(att => 
+      att.isDrive && 
+      att.driveId && 
+      !enrichmentAttempts.current.has(att.id) &&
+      (att.name?.startsWith('Google Drive (') || att.size === 0 || !att.dimensions)
+    );
+
+    if (pendingEnrichment.length === 0) return;
+
+    pendingEnrichment.forEach(async (att) => {
+      enrichmentAttempts.current.add(att.id);
+      try {
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${att.driveId}?fields=name,size,imageMediaMetadata,mimeType`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) return;
+        const metadata = await res.json();
+        
+        onUpdateAttachments(prev => prev.map(item => {
+          if (item.id === att.id) {
+            let dims = '';
+            if (metadata.imageMediaMetadata && metadata.imageMediaMetadata.width && metadata.imageMediaMetadata.height) {
+              dims = `${metadata.imageMediaMetadata.width}x${metadata.imageMediaMetadata.height}`;
+            }
+            return {
+              ...item,
+              name: metadata.name || item.name,
+              size: metadata.size ? parseInt(metadata.size, 10) : item.size,
+              dimensions: dims,
+              type: metadata.mimeType || item.type
+            };
+          }
+          return item;
+        }));
+      } catch (err) {
+        console.debug("Failed to enrich attachment metadata for " + att.id, err);
+      }
+    });
+  }, [attachments, onUpdateAttachments, readOnly]);
 
   const handleUrlSubmit = (e) => {
     e.preventDefault();
@@ -101,9 +150,7 @@ export default function PostEditor({
     const shouldBeCover = !hasCover;
 
     // Use thumbnail link for preview, or direct render link
-    const dataUrl = isVideo 
-      ? `https://drive.google.com/thumbnail?sz=w1000&id=${driveId}`
-      : `https://lh3.googleusercontent.com/d/${driveId}`;
+    const dataUrl = `https://drive.google.com/thumbnail?sz=w1000&id=${driveId}`;
 
     const newAttachment = {
       id: 'att-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
@@ -118,6 +165,39 @@ export default function PostEditor({
 
     onUpdateAttachments(prev => [...prev, newAttachment]);
     setLinkUrl('');
+
+    // Fetch details asynchronously to enrich it immediately
+    const token = localStorage.getItem('gdrive_access_token');
+    if (token) {
+      fetch(`https://www.googleapis.com/drive/v3/files/${driveId}?fields=name,size,imageMediaMetadata,mimeType`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to fetch GDrive metadata');
+        return res.json();
+      })
+      .then(metadata => {
+        onUpdateAttachments(prev => prev.map(att => {
+          if (att.driveId === driveId) {
+            let dims = '';
+            if (metadata.imageMediaMetadata && metadata.imageMediaMetadata.width && metadata.imageMediaMetadata.height) {
+              dims = `${metadata.imageMediaMetadata.width}x${metadata.imageMediaMetadata.height}`;
+            }
+            return {
+              ...att,
+              name: metadata.name || att.name,
+              size: metadata.size ? parseInt(metadata.size, 10) : att.size,
+              dimensions: dims,
+              type: metadata.mimeType || att.type
+            };
+          }
+          return att;
+        }));
+      })
+      .catch(err => {
+        console.debug("Failed to fetch Google Drive file metadata:", err);
+      });
+    }
   };
 
   const handleAttachmentClick = (att) => {
@@ -179,6 +259,24 @@ export default function PostEditor({
     const sizes = ['Octets', 'Ko', 'Mo'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
+  const getFormat = (att) => {
+    if (att.type) {
+      const parts = att.type.split('/');
+      if (parts.length > 1) {
+        let f = parts[1].toUpperCase();
+        if (f === 'JPEG') return 'JPG';
+        return f;
+      }
+    }
+    if (att.name) {
+      const ext = att.name.split('.').pop();
+      if (ext && ext.length < 5 && ext !== att.name) {
+        return ext.toUpperCase();
+      }
+    }
+    return '';
   };
 
   // Fermer le menu lors d'un clic extérieur
@@ -388,6 +486,19 @@ export default function PostEditor({
                         type={att.type} 
                         alt={att.name} 
                         className="attachment-thumbnail" 
+                        onLoad={(meta) => {
+                          if (meta.width && meta.height && !att.dimensions) {
+                            onUpdateAttachments(prev => prev.map(item => {
+                              if (item.id === att.id) {
+                                return {
+                                  ...item,
+                                  dimensions: `${meta.width}x${meta.height}`
+                                };
+                              }
+                              return item;
+                            }));
+                          }
+                        }}
                       />
                       {att.isCover && <span className="cover-badge">🌅 Couverture</span>}
                       {isVideo && <span className="video-badge">📹 Vidéo</span>}
@@ -401,7 +512,23 @@ export default function PostEditor({
 
                   <div className="attachment-info">
                     <span className="attachment-name" title={att.name}>{att.name}</span>
-                    <span className="attachment-size">{formatSize(att.size)}</span>
+                    <div className="attachment-details" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.15rem' }}>
+                      <span className="attachment-size" style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                        {att.size > 0 ? formatSize(att.size) : 'Taille inconnue'}
+                      </span>
+                      <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
+                        {getFormat(att) && (
+                          <span className="attachment-format" style={{ fontSize: '0.65rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.05)', padding: '0.05rem 0.3rem', borderRadius: '3px' }}>
+                            {getFormat(att)}
+                          </span>
+                        )}
+                        {att.dimensions && (
+                          <span className="attachment-dimensions" style={{ fontSize: '0.65rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.05)', padding: '0.05rem 0.3rem', borderRadius: '3px' }}>
+                            {att.dimensions}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   {!readOnly && (
@@ -428,7 +555,7 @@ export default function PostEditor({
       </div>
 
       {/* MENU CONTEXTUEL FLOTTANT (CLIC DROIT) */}
-      {!readOnly && contextMenu.visible && (
+      {!readOnly && contextMenu.visible && createPortal(
         <div 
           className="custom-context-menu glass-panel" 
           style={{ top: contextMenu.y, left: contextMenu.x }}
@@ -447,7 +574,8 @@ export default function PostEditor({
           <button type="button" className="btn-delete" onClick={() => { handleDeleteAttachment(contextMenu.attachmentId); setContextMenu({ visible: false, x: 0, y: 0, attachmentId: null }); }}>
             🗑️ Supprimer la pièce jointe
           </button>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* MODALE LIGHTBOX POUR LA PRÉVISUALISATION DIRECTE DES MÉDIAS */}

@@ -69,22 +69,31 @@ export default function Board({
   onEditCard,
   onAddCard,
   onUpdateCardDate,
-  currentUser
+  currentUser,
+  selectedCompanyFilter,
+  setSelectedCompanyFilter
 }) {
   const isClient = currentUser?.role?.trim().toLowerCase() === 'client';
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPlatformFilter, setSelectedPlatformFilter] = useState('all');
-  const [selectedCompanyFilter, setSelectedCompanyFilter] = useState(() => {
-    if (isClient && currentUser?.company_id) {
-      return currentUser.company_id;
-    }
-    return 'all';
-  });
   const [draggedOverColumn, setDraggedOverColumn] = useState(null);
   const [copiedCardId, setCopiedCardId] = useState(null);
   const [activeMenuCardId, setActiveMenuCardId] = useState(null);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
+  const [isCompanyDropdownOpen, setIsCompanyDropdownOpen] = useState(false);
+
+  // Close company dropdown when clicking outside
+  useEffect(() => {
+    if (!isCompanyDropdownOpen) return;
+    const handleOutsideClick = (e) => {
+      if (!e.target.closest('.sidebar-companies-dropdown-container')) {
+        setIsCompanyDropdownOpen(false);
+      }
+    };
+    document.addEventListener('click', handleOutsideClick);
+    return () => document.removeEventListener('click', handleOutsideClick);
+  }, [isCompanyDropdownOpen]);
 
   // Set default company filter to first company when companies load
   useEffect(() => {
@@ -373,32 +382,126 @@ export default function Board({
             </span>
           </div>
           
-          <div className="sidebar-companies-list">
-
-            {companies.map(comp => {
-              const compCardsCount = cards.filter(c => c.company_id === comp.id).length;
-              return (
-                <button
-                  key={comp.id}
-                  className={`sidebar-company-btn ${selectedCompanyFilter === comp.id ? 'active' : ''}`}
-                  onClick={() => setSelectedCompanyFilter(comp.id)}
-                >
-                  {comp.logo_drive_id ? (
+          <div className="sidebar-companies-dropdown-container" style={{ position: 'relative', width: '100%', marginBottom: '0.5rem' }}>
+            <button 
+              type="button"
+              className="sidebar-dropdown-trigger glass-panel"
+              onClick={() => setIsCompanyDropdownOpen(!isCompanyDropdownOpen)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                width: '100%',
+                padding: '0.65rem 0.85rem',
+                borderRadius: 'var(--radius-md)',
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid var(--surface-border)',
+                color: 'var(--text-main)',
+                cursor: 'pointer',
+                textAlign: 'left',
+                fontSize: '0.85rem',
+                fontWeight: '500',
+                transition: 'var(--transition)'
+              }}
+            >
+              {selectedCompany ? (
+                <>
+                  {selectedCompany.logo_drive_id ? (
                     <div className="btn-logo-wrapper">
                       <SecureMedia 
-                        driveId={comp.logo_drive_id} 
+                        driveId={selectedCompany.logo_drive_id} 
                         type="image/png" 
-                        alt={comp.name} 
+                        alt={selectedCompany.name} 
                       />
                     </div>
                   ) : (
                     <div className="btn-logo-fallback">🏢</div>
                   )}
-                  <span className="btn-name">{comp.name}</span>
-                  <span className="sidebar-badge">{compCardsCount}</span>
-                </button>
-              );
-            })}
+                  <span className="btn-name" style={{ flexGrow: 1 }}>{selectedCompany.name}</span>
+                </>
+              ) : (
+                <>
+                  <div className="btn-logo-fallback">🏢</div>
+                  <span className="btn-name" style={{ flexGrow: 1 }}>Sélectionner un client...</span>
+                </>
+              )}
+              <ChevronDown 
+                size={16} 
+                style={{ 
+                  transform: isCompanyDropdownOpen ? 'rotate(180deg)' : 'none', 
+                  transition: 'transform 0.2s',
+                  color: 'var(--text-muted)' 
+                }} 
+              />
+            </button>
+
+            {isCompanyDropdownOpen && (
+              <div 
+                className="sidebar-dropdown-menu glass-panel"
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  right: 0,
+                  marginTop: '0.5rem',
+                  maxHeight: '260px',
+                  overflowY: 'auto',
+                  zIndex: 100,
+                  background: 'var(--surface-color)',
+                  border: '1px solid var(--surface-border)',
+                  borderRadius: 'var(--radius-md)',
+                  boxShadow: 'var(--shadow-lg)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  padding: '0.35rem'
+                }}
+              >
+                {companies.map(comp => {
+                  const compCardsCount = cards.filter(c => c.company_id === comp.id).length;
+                  return (
+                    <button
+                      key={comp.id}
+                      type="button"
+                      className={`sidebar-company-btn ${selectedCompanyFilter === comp.id ? 'active' : ''}`}
+                      onClick={() => {
+                        setSelectedCompanyFilter(comp.id);
+                        setIsCompanyDropdownOpen(false);
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                        padding: '0.6rem 0.85rem',
+                        borderRadius: 'var(--radius-md)',
+                        background: selectedCompanyFilter === comp.id ? 'rgba(25, 140, 204, 0.08)' : 'transparent',
+                        border: 'none',
+                        color: selectedCompanyFilter === comp.id ? 'var(--primary-color)' : 'var(--text-main)',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        width: '100%',
+                        fontSize: '0.825rem',
+                        fontWeight: selectedCompanyFilter === comp.id ? '600' : '500',
+                        transition: 'var(--transition)'
+                      }}
+                    >
+                      {comp.logo_drive_id ? (
+                        <div className="btn-logo-wrapper">
+                          <SecureMedia 
+                            driveId={comp.logo_drive_id} 
+                            type="image/png" 
+                            alt={comp.name} 
+                          />
+                        </div>
+                      ) : (
+                        <div className="btn-logo-fallback">🏢</div>
+                      )}
+                      <span className="btn-name" style={{ flexGrow: 1 }}>{comp.name}</span>
+                      <span className="sidebar-badge">{compCardsCount}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div className="sidebar-divider"></div>
