@@ -1,22 +1,47 @@
 .action-panel {
-  padding: 1.25rem 1.5rem;
+  padding: 1.25rem 1.75rem;
   display: flex;
   justify-content: flex-end;
-  gap: 1rem;
+  align-items: center;
+  gap: 1.25rem;
   margin-top: 2rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--surface-border);
+  background: rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-md);
+  transition: var(--transition);
+}
+
+[data-theme="light"] .action-panel {
+  background: rgba(0, 0, 0, 0.01);
 }
 
 .btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.8rem 1.6rem;
   border-radius: var(--radius-md);
   font-weight: 600;
-  font-size: 0.95rem;
-  border: none;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 0.925rem;
+  border: 1px solid transparent;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
+  outline: none;
+}
+
+.btn:active {
+  transform: scale(0.97) translateY(0) !important;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
 }
 
 .btn-copy {
@@ -26,57 +51,61 @@
 }
 
 [data-theme="light"] .btn-copy {
-  background: rgba(0, 0, 0, 0.01);
+  background: rgba(0, 0, 0, 0.02);
 }
 
 .btn-copy:not(:disabled):hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.15);
   transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 [data-theme="light"] .btn-copy:not(:disabled):hover {
-  background: rgba(0, 0, 0, 0.03);
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 .btn-copy.copied {
   background: var(--success-color);
   color: white;
   border-color: var(--success-color);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
 }
 
 .btn-trello-save {
   background: var(--primary-color);
   color: white;
-  box-shadow: 0 4px 10px rgba(25, 140, 204, 0.2);
+  box-shadow: 0 4px 12px rgba(25, 140, 204, 0.25);
 }
 
 .btn-trello-save:not(:disabled):hover {
   background: var(--primary-hover);
   transform: translateY(-2px);
-  box-shadow: 0 6px 15px rgba(25, 140, 204, 0.3);
+  box-shadow: 0 6px 20px rgba(25, 140, 204, 0.4);
 }
 
 .btn-client-validate {
   background: var(--success-color);
   color: white;
-  box-shadow: 0 4px 10px rgba(16, 185, 129, 0.2);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
 }
 
 .btn-client-validate:not(:disabled):hover {
   background: #059669;
   transform: translateY(-2px);
-  box-shadow: 0 6px 15px rgba(16, 185, 129, 0.3);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
 }
 
 .btn-client-refuse {
   background: var(--danger-color);
   color: white;
-  box-shadow: 0 4px 10px rgba(239, 68, 68, 0.2);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25);
 }
 
 .btn-client-refuse:not(:disabled):hover {
   background: #dc2626;
   transform: translateY(-2px);
-  box-shadow: 0 6px 15px rgba(239, 68, 68, 0.3);
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
 }
-

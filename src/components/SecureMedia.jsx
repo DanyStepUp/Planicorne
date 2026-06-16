@@ -9,6 +9,7 @@ import { getMediaUrl, revokeMediaUrl } from '../utils/MediaCacheService';
  */
 export default function SecureMedia({ src, driveId, type, className, alt, style, isVideoPlayer = false, onLoad }) {
   const [mimeType, setMimeType] = useState(type || '');
+  const [hasError, setHasError] = useState(false);
   const [mediaUrl, setMediaUrl] = useState(() => {
     if (!driveId) return src || '';
     
@@ -16,10 +17,11 @@ export default function SecureMedia({ src, driveId, type, className, alt, style,
     if (isVideoPlayer && mimeType?.startsWith('video/')) {
       return `https://drive.google.com/file/d/${driveId}/preview`;
     }
-    return src || `https://drive.google.com/thumbnail?sz=w1000&id=${driveId}`;
+    return src || `https://lh3.googleusercontent.com/d/${driveId}`;
   });
 
   useEffect(() => {
+    setHasError(false);
     if (!driveId) {
       const t = setTimeout(() => setMediaUrl(src || ''), 0);
       return () => clearTimeout(t);
@@ -52,7 +54,7 @@ export default function SecureMedia({ src, driveId, type, className, alt, style,
         console.debug("Info loading secure cached media fallback:", err.message);
         if (isMounted) {
           // Fallback to direct public CDN link if caching/fetching fails
-          setMediaUrl(src || `https://drive.google.com/thumbnail?sz=w1000&id=${driveId}`);
+          setMediaUrl(src || `https://lh3.googleusercontent.com/d/${driveId}`);
         }
       }
     };
@@ -78,6 +80,26 @@ export default function SecureMedia({ src, driveId, type, className, alt, style,
     );
   }
 
+  if (hasError) {
+    return (
+      <div 
+        className={className} 
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 'inherit',
+          lineHeight: 1,
+          ...style
+        }}
+      >
+        🏢
+      </div>
+    );
+  }
+
   return (
     <img 
       src={mediaUrl} 
@@ -96,8 +118,12 @@ export default function SecureMedia({ src, driveId, type, className, alt, style,
         // Fallbacks if Google rejects the thumbnail link or blob fails
         if (src && e.target.src !== src) {
           e.target.src = src;
-        } else if (driveId && e.target.src !== `https://drive.google.com/thumbnail?sz=w1000&id=${driveId}`) {
-          e.target.src = `https://drive.google.com/thumbnail?sz=w1000&id=${driveId}`;
+        } else if (driveId && e.target.src !== `https://lh3.googleusercontent.com/d/${driveId}`) {
+          e.target.src = `https://lh3.googleusercontent.com/d/${driveId}`;
+        } else if (alt && alt.toLowerCase().includes('step up') && e.target.src !== '/Logo Step Up.png') {
+          e.target.src = '/Logo Step Up.png';
+        } else {
+          setHasError(true);
         }
       }}
     />

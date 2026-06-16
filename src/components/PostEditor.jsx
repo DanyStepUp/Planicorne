@@ -11,7 +11,7 @@ const MAX_LENGTHS = {
   google: 1500
 };
 
-export default function PostEditor({ 
+export default function PostEditor({
   title = '',
   onChangeTitle,
   companyId = '',
@@ -19,10 +19,10 @@ export default function PostEditor({
   status = 'draft',
   onChangeStatus,
   companies = [],
-  content, 
-  onChange, 
-  platform, 
-  attachments = [], 
+  content,
+  onChange,
+  platform,
+  attachments = [],
   onUpdateAttachments,
   readOnly = false,
   scheduledAt,
@@ -31,7 +31,7 @@ export default function PostEditor({
   const maxLength = MAX_LENGTHS[platform] || 2000;
   const currentLength = content.length;
   const percentage = (currentLength / maxLength) * 100;
-  
+
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, attachmentId: null });
   const [linkUrl, setLinkUrl] = useState('');
   const [previewMedia, setPreviewMedia] = useState(null);
@@ -44,9 +44,9 @@ export default function PostEditor({
     if (!token || readOnly) return;
 
     // Find Drive attachments that need enrichment
-    const pendingEnrichment = attachments.filter(att => 
-      att.isDrive && 
-      att.driveId && 
+    const pendingEnrichment = attachments.filter(att =>
+      att.isDrive &&
+      att.driveId &&
       !enrichmentAttempts.current.has(att.id) &&
       (att.name?.startsWith('Google Drive (') || att.size === 0 || !att.dimensions)
     );
@@ -61,7 +61,7 @@ export default function PostEditor({
         });
         if (!res.ok) return;
         const metadata = await res.json();
-        
+
         onUpdateAttachments(prev => prev.map(item => {
           if (item.id === att.id) {
             let dims = '';
@@ -139,18 +139,18 @@ export default function PostEditor({
     }
 
     // Google Drive Link
-    const isVideo = url.toLowerCase().includes('video') || 
-                    url.toLowerCase().includes('mp4') || 
-                    url.toLowerCase().includes('mov') || 
-                    url.toLowerCase().includes('avi') || 
-                    url.toLowerCase().includes('mkv') || 
-                    url.toLowerCase().includes('webm');
+    const isVideo = url.toLowerCase().includes('video') ||
+      url.toLowerCase().includes('mp4') ||
+      url.toLowerCase().includes('mov') ||
+      url.toLowerCase().includes('avi') ||
+      url.toLowerCase().includes('mkv') ||
+      url.toLowerCase().includes('webm');
 
     const hasCover = attachments.some(att => att.isCover);
     const shouldBeCover = !hasCover;
 
     // Use thumbnail link for preview, or direct render link
-    const dataUrl = `https://drive.google.com/thumbnail?sz=w1000&id=${driveId}`;
+    const dataUrl = `https://lh3.googleusercontent.com/d/${driveId}`;
 
     const newAttachment = {
       id: 'att-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
@@ -172,31 +172,31 @@ export default function PostEditor({
       fetch(`https://www.googleapis.com/drive/v3/files/${driveId}?fields=name,size,imageMediaMetadata,mimeType`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch GDrive metadata');
-        return res.json();
-      })
-      .then(metadata => {
-        onUpdateAttachments(prev => prev.map(att => {
-          if (att.driveId === driveId) {
-            let dims = '';
-            if (metadata.imageMediaMetadata && metadata.imageMediaMetadata.width && metadata.imageMediaMetadata.height) {
-              dims = `${metadata.imageMediaMetadata.width}x${metadata.imageMediaMetadata.height}`;
+        .then(res => {
+          if (!res.ok) throw new Error('Failed to fetch GDrive metadata');
+          return res.json();
+        })
+        .then(metadata => {
+          onUpdateAttachments(prev => prev.map(att => {
+            if (att.driveId === driveId) {
+              let dims = '';
+              if (metadata.imageMediaMetadata && metadata.imageMediaMetadata.width && metadata.imageMediaMetadata.height) {
+                dims = `${metadata.imageMediaMetadata.width}x${metadata.imageMediaMetadata.height}`;
+              }
+              return {
+                ...att,
+                name: metadata.name || att.name,
+                size: metadata.size ? parseInt(metadata.size, 10) : att.size,
+                dimensions: dims,
+                type: metadata.mimeType || att.type
+              };
             }
-            return {
-              ...att,
-              name: metadata.name || att.name,
-              size: metadata.size ? parseInt(metadata.size, 10) : att.size,
-              dimensions: dims,
-              type: metadata.mimeType || att.type
-            };
-          }
-          return att;
-        }));
-      })
-      .catch(err => {
-        console.debug("Failed to fetch Google Drive file metadata:", err);
-      });
+            return att;
+          }));
+        })
+        .catch(err => {
+          console.debug("Failed to fetch Google Drive file metadata:", err);
+        });
     }
   };
 
@@ -243,7 +243,7 @@ export default function PostEditor({
   const handleContextMenu = (e, attachment) => {
     if (readOnly) return;
     if (!attachment.type?.startsWith('image/') && !attachment.type?.startsWith('video/')) return;
-    
+
     e.preventDefault();
     setContextMenu({
       visible: true,
@@ -293,10 +293,10 @@ export default function PostEditor({
       {/* SECTION MÉTADONNÉES : TITRE, ENTREPRISE ET STATUT */}
       <div className="editor-attachments-section glass-panel animate-fade-in" style={{ animationDelay: '0.05s', padding: '1.2rem' }}>
         <div className="metadata-fields-grid">
-          
+
           <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
             <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Titre de la publication</label>
-            <input 
+            <input
               type="text"
               placeholder="Saisir un titre..."
               value={title}
@@ -371,11 +371,11 @@ export default function PostEditor({
             <span>Planification de la publication</span>
           </h3>
         </div>
-        
+
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', marginTop: '0.5rem' }}>
           <div style={{ position: 'relative', width: '220px' }}>
-            <input 
-              type="datetime-local" 
+            <input
+              type="datetime-local"
               value={scheduledAt ? new Date(new Date(scheduledAt).getTime() - new Date(scheduledAt).getTimezoneOffset() * 60000).toISOString().substring(0, 16) : ''}
               onChange={(e) => {
                 const val = e.target.value;
@@ -396,8 +396,8 @@ export default function PostEditor({
             />
           </div>
           <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            {scheduledAt 
-              ? `Ce post est planifié pour être publié le ${new Date(scheduledAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}.` 
+            {scheduledAt
+              ? `Ce post est planifié pour être publié le ${new Date(scheduledAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}.`
               : "Post non planifié. Choisissez une date et heure pour programmer ce post dans le calendrier."
             }
           </span>
@@ -411,7 +411,7 @@ export default function PostEditor({
             {currentLength} / {maxLength}
           </span>
         </div>
-        
+
         <textarea
           className="editor-textarea"
           value={content}
@@ -421,10 +421,10 @@ export default function PostEditor({
           readOnly={readOnly}
           style={readOnly ? { cursor: 'default', background: 'rgba(255,255,255,0.01)' } : {}}
         />
-        
+
         <div className="editor-footer">
           <p className="hint">
-            {readOnly 
+            {readOnly
               ? "Revue du texte de la publication. Vous pouvez commenter ci-dessous pour proposer des ajustements."
               : "Astuce: Sautez des lignes pour aérer votre texte. Les emojis sont les bienvenus ! ✨"
             }
@@ -444,15 +444,15 @@ export default function PostEditor({
         {!readOnly && (
           <>
             <form className="attachments-link-input-row" onSubmit={handleUrlSubmit}>
-              <input 
-                type="text" 
-                placeholder="Coller un lien Google Drive ou un lien direct d'image/vidéo..." 
+              <input
+                type="text"
+                placeholder="Coller un lien Google Drive ou un lien direct d'image/vidéo..."
                 value={linkUrl}
                 onChange={(e) => setLinkUrl(e.target.value)}
                 className="drive-link-input"
               />
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 className="btn-add-drive-link"
               >
                 Ajouter lien
@@ -468,10 +468,10 @@ export default function PostEditor({
               const isImage = att.type?.startsWith('image/');
               const isVideo = att.type?.startsWith('video/');
               const hasThumbnail = isImage || isVideo;
-              
+
               return (
-                <div 
-                  key={att.id} 
+                <div
+                  key={att.id}
                   className={`attachment-card glass-panel ${att.isCover ? 'is-cover' : ''}`}
                   onContextMenu={(e) => !readOnly && handleContextMenu(e, att)}
                   onClick={() => handleAttachmentClick(att)}
@@ -480,12 +480,12 @@ export default function PostEditor({
                 >
                   {hasThumbnail ? (
                     <div className="attachment-thumbnail-wrapper">
-                      <SecureMedia 
-                        src={att.data} 
-                        driveId={att.driveId} 
-                        type={att.type} 
-                        alt={att.name} 
-                        className="attachment-thumbnail" 
+                      <SecureMedia
+                        src={att.data}
+                        driveId={att.driveId}
+                        type={att.type}
+                        alt={att.name}
+                        className="attachment-thumbnail"
                         onLoad={(meta) => {
                           if (meta.width && meta.height && !att.dimensions) {
                             onUpdateAttachments(prev => prev.map(item => {
@@ -532,8 +532,8 @@ export default function PostEditor({
                   </div>
 
                   {!readOnly && (
-                    <button 
-                      type="button" 
+                    <button
+                      type="button"
                       className="btn-delete-attachment"
                       onClick={() => handleDeleteAttachment(att.id)}
                       title="Supprimer la pièce jointe"
@@ -556,8 +556,8 @@ export default function PostEditor({
 
       {/* MENU CONTEXTUEL FLOTTANT (CLIC DROIT) */}
       {!readOnly && contextMenu.visible && createPortal(
-        <div 
-          className="custom-context-menu glass-panel" 
+        <div
+          className="custom-context-menu glass-panel"
           style={{ top: contextMenu.y, left: contextMenu.x }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -582,9 +582,9 @@ export default function PostEditor({
       {previewMedia && (
         <div className="media-preview-lightbox" onClick={() => setPreviewMedia(null)}>
           <div className="lightbox-content" onClick={(e) => e.stopPropagation()}>
-            <button 
-              type="button" 
-              className="lightbox-close-btn" 
+            <button
+              type="button"
+              className="lightbox-close-btn"
               onClick={() => setPreviewMedia(null)}
               title="Fermer la prévisualisation"
             >
@@ -593,26 +593,26 @@ export default function PostEditor({
             <div className="lightbox-media-wrapper">
               {previewMedia.type?.startsWith('video/') ? (
                 previewMedia.driveId ? (
-                  <iframe 
+                  <iframe
                     src={`https://drive.google.com/file/d/${previewMedia.driveId}/preview`}
                     className="lightbox-video-iframe"
                     allow="autoplay"
                     frameBorder="0"
                   ></iframe>
                 ) : (
-                  <video 
-                    src={previewMedia.data} 
-                    controls 
-                    autoPlay 
+                  <video
+                    src={previewMedia.data}
+                    controls
+                    autoPlay
                     className="lightbox-video-element"
                   />
                 )
               ) : (
-                <SecureMedia 
-                  src={previewMedia.data} 
-                  driveId={previewMedia.driveId} 
-                  type={previewMedia.type} 
-                  alt={previewMedia.name} 
+                <SecureMedia
+                  src={previewMedia.data}
+                  driveId={previewMedia.driveId}
+                  type={previewMedia.type}
+                  alt={previewMedia.name}
                   className="lightbox-image-element"
                 />
               )}
@@ -620,10 +620,10 @@ export default function PostEditor({
             <div className="lightbox-caption">
               <span className="lightbox-media-name">{previewMedia.name}</span>
               {previewMedia.driveId && (
-                <a 
-                  href={`https://drive.google.com/file/d/${previewMedia.driveId}/view?usp=drivesdk`} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
+                <a
+                  href={`https://drive.google.com/file/d/${previewMedia.driveId}/view?usp=drivesdk`}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="lightbox-drive-btn"
                 >
                   Ouvrir dans Drive ↗

@@ -1,5 +1,5 @@
 
-import { Moon, Sun, Columns, Database, LogOut, User, Calendar, Users } from 'lucide-react';
+import { Moon, Sun, Columns, Database, LogOut, User, Calendar, Users, Lock } from 'lucide-react';
 import './Header.css';
 
 export default function Header({
@@ -10,7 +10,8 @@ export default function Header({
   supabaseConnected,
   supabaseTableExists,
   currentUser,
-  onLogout
+  onLogout,
+  onChangePasswordClick
 }) {
   const getSyncBadge = () => {
     if (supabaseConnected) {
@@ -72,7 +73,7 @@ export default function Header({
               <span>Kanban</span>
             </button>
 
-            {currentUser.role?.trim().toLowerCase() === 'admin' && (
+            {['admin', 'manager', 'super_manager'].includes(currentUser.role?.trim().toLowerCase()) && (
               <button
                 className={`nav-btn ${activeTab === 'admin_panel' ? 'active' : ''}`}
                 onClick={() => setActiveTab('admin_panel')}
@@ -82,7 +83,7 @@ export default function Header({
               </button>
             )}
 
-            {currentUser.role?.trim().toLowerCase() === 'admin' && (
+            {['admin', 'super_manager'].includes(currentUser.role?.trim().toLowerCase()) && (
               <button
                 className={`nav-btn ${activeTab === 'settings' ? 'active' : ''}`}
                 onClick={() => setActiveTab('settings')}
@@ -95,7 +96,7 @@ export default function Header({
         )}
 
         <div className="header-actions">
-          {currentUser?.role?.trim().toLowerCase() === 'admin' && getSyncBadge()}
+          {['admin', 'manager', 'super_manager'].includes(currentUser?.role?.trim().toLowerCase()) && getSyncBadge()}
 
           {currentUser && (
             <div className="user-profile-badge" style={{
@@ -112,8 +113,27 @@ export default function Header({
               <User size={14} style={{ color: 'var(--primary-color)' }} />
               <span>{currentUser.name}</span>
               <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.06)', padding: '0.05rem 0.35rem', borderRadius: '4px', fontWeight: 700, textTransform: 'uppercase' }}>
-                {currentUser.role?.trim().toLowerCase() === 'admin' ? 'Admin' : (currentUser.role?.trim().toLowerCase() === 'client' ? 'Client' : 'StepUp')}
+                {currentUser.role?.trim().toLowerCase() === 'admin' ? 'Admin' : (currentUser.role?.trim().toLowerCase() === 'super_manager' ? 'Super Manager' : (currentUser.role?.trim().toLowerCase() === 'manager' ? 'Manager' : (currentUser.role?.trim().toLowerCase() === 'client' ? 'Client' : 'StepUp')))}
               </span>
+              <button 
+                onClick={onChangePasswordClick} 
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--primary-color)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '0.2rem',
+                  marginLeft: '0.5rem',
+                  transition: 'transform 0.2s ease'
+                }}
+                title="Modifier mon mot de passe"
+                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.15)'}
+                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+              >
+                <Lock size={14} />
+              </button>
               <button 
                 onClick={onLogout} 
                 style={{

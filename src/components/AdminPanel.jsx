@@ -6,7 +6,8 @@ import {
   Users,
   Save,
   ShieldAlert,
-  Edit
+  Edit,
+  Trash2
 } from 'lucide-react';
 import {
   insertCompany,
@@ -15,7 +16,9 @@ import {
   createAppUser,
   updateCompany,
   updateClient,
-  updateStepupUser
+  updateStepupUser,
+  deleteClient,
+  deleteStepupUser
 } from '../utils/supabaseService';
 import SecureMedia from './SecureMedia';
 import './AdminPanel.css';
@@ -24,8 +27,12 @@ export default function AdminPanel({
   companies = [],
   clients = [],
   stepupUsers = [],
-  onRefreshData
+  onRefreshData,
+  currentUser
 }) {
+  const filteredStepupUsers = currentUser?.role?.trim().toLowerCase() === 'manager'
+    ? stepupUsers.filter(u => u.user_role !== 'super_manager')
+    : stepupUsers;
   const [activeFormTab, setActiveFormTab] = useState('company'); // company, client, stepup
   const [activeListTab, setActiveListTab] = useState('companies'); // companies, clients, stepup
 
@@ -59,6 +66,7 @@ export default function AdminPanel({
   const [stepupEmail, setStepupEmail] = useState('');
   const [stepupPassword, setStepupPassword] = useState('');
   const [stepupRole, setStepupRole] = useState('Rédacteur');
+  const [stepupUserRole, setStepupUserRole] = useState('stepup_user');
   const [selectedCompanyIds, setSelectedCompanyIds] = useState([]);
 
   const [loading, setLoading] = useState(false);
@@ -103,6 +111,7 @@ export default function AdminPanel({
     setStepupEmail('');
     setStepupPassword('');
     setStepupRole('Rédacteur');
+    setStepupUserRole('stepup_user');
     setSelectedCompanyIds([]);
   };
 
@@ -157,11 +166,16 @@ export default function AdminPanel({
   };
 
   const handleStartEditStepup = (user) => {
+    if (user.user_role === 'super_manager' && !['admin', 'super_manager'].includes(currentUser?.role?.trim().toLowerCase())) {
+      alert("Action non autorisée.");
+      return;
+    }
     handleCancelEdit();
     setEditingStepup(user);
     setStepupName(user.name);
     setStepupEmail(user.email);
     setStepupRole(user.role || 'Rédacteur');
+    setStepupUserRole(user.user_role || 'stepup_user');
     setSelectedCompanyIds(user.company_ids || []);
     setActiveFormTab('stepup');
   };
@@ -293,7 +307,11 @@ export default function AdminPanel({
       if (onRefreshData) await onRefreshData();
     } catch (err) {
       console.error(err);
-      alert("Erreur lors de l'enregistrement du compte client.");
+      if (err?.code === '23505' || err?.message?.includes('already exists')) {
+        alert("Cette adresse e-mail est déjà utilisée par un autre utilisateur (client ou collaborateur).");
+      } else {
+        alert("Erreur lors de l'enregistrement du compte client.");
+      }
     } finally {
       setLoading(false);
     }
@@ -307,12 +325,19 @@ export default function AdminPanel({
     }
     setLoading(true);
 
+    if (stepupUserRole === 'super_manager' && !['admin', 'super_manager'].includes(currentUser?.role?.trim().toLowerCase())) {
+      alert("Vous n'avez pas l'autorisation d'attribuer le rôle de Super Manager.");
+      setLoading(false);
+      return;
+    }
+
     try {
       if (editingStepup) {
         await updateStepupUser(editingStepup.id, {
           name: stepupName.trim(),
           email: stepupEmail.trim(),
-          role: stepupRole
+          role: stepupRole,
+          user_role: stepupUserRole
         }, {
           password: stepupPassword.trim() || undefined
         }, selectedCompanyIds);
@@ -337,7 +362,7 @@ export default function AdminPanel({
           email: stepupEmail.trim().toLowerCase(),
           password: stepupPassword.trim(),
           name: stepupName.trim(),
-          role: 'stepup_user',
+          role: stepupUserRole,
           stepup_user_id: stepupUserId
         });
 
@@ -348,12 +373,55 @@ export default function AdminPanel({
       setStepupEmail('');
       setStepupPassword('');
       setStepupRole('Rédacteur');
+      setStepupUserRole('stepup_user');
       setSelectedCompanyIds([]);
 
       if (onRefreshData) await onRefreshData();
     } catch (err) {
       console.error(err);
-      alert("Erreur lors de l'enregistrement du collaborateur Step Up.");
+      if (err?.code === '23505' || err?.message?.includes('already exists')) {
+        alert("Cette adresse e-mail est déjà utilisée par un autre utilisateur (client ou collaborateur).");
+      } else {
+        alert("Erreur lors de l'enregistrement du collaborateur Step Up.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteClient = async (client) => {
+    if (!window.confirm(`Voulez-vous vraiment supprimer le client "${client.name}" ? Cette action est irréversible.`)) {
+      return;
+    }
+    setLoading(true);
+    try {
+      await deleteClient(client.id);
+      alert(`Le client "${client.name}" a été supprimé avec succès.`);
+      if (onRefreshData) await onRefreshData();
+    } catch (err) {
+      console.error(err);
+      alert("Erreur lors de la suppression du client.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteStepupUser = async (user) => {
+    if (user.user_role === 'super_manager' && !['admin', 'super_manager'].includes(currentUser?.role?.trim().toLowerCase())) {
+      alert("Action non autorisée.");
+      return;
+    }
+    if (!window.confirm(`Voulez-vous vraiment supprimer le collaborateur "${user.name}" ? Cette action est irréversible.`)) {
+      return;
+    }
+    setLoading(true);
+    try {
+      await deleteStepupUser(user.id);
+      alert(`Le collaborateur "${user.name}" a été supprimé avec succès.`);
+      if (onRefreshData) await onRefreshData();
+    } catch (err) {
+      console.error(err);
+      alert("Erreur lors de la suppression du collaborateur.");
     } finally {
       setLoading(false);
     }
@@ -608,7 +676,7 @@ export default function AdminPanel({
                   <label>Nom complet</label>
                   <input
                     type="text"
-                    placeholder="Ex: Thomas Anderson"
+                    placeholder="Ex: Rakoto Rasoa"
                     value={clientName}
                     onChange={(e) => setClientName(e.target.value)}
                     required
@@ -619,7 +687,7 @@ export default function AdminPanel({
                   <label>E-mail de connexion</label>
                   <input
                     type="email"
-                    placeholder="Ex: thomas@acapela.com"
+                    placeholder="Ex: votre@email.com"
                     value={clientEmail}
                     onChange={(e) => setClientEmail(e.target.value)}
                     required
@@ -679,6 +747,21 @@ export default function AdminPanel({
                 </div>
 
                 <div className="form-group">
+                  <label>Permissions</label>
+                  <select
+                    value={stepupUserRole}
+                    onChange={(e) => setStepupUserRole(e.target.value)}
+                    required
+                  >
+                    <option value="stepup_user">Collaborateur Step Up</option>
+                    <option value="manager">Manager Step Up</option>
+                    {['admin', 'super_manager'].includes(currentUser?.role?.trim().toLowerCase()) && (
+                      <option value="super_manager">Super Manager Step Up</option>
+                    )}
+                  </select>
+                </div>
+
+                <div className="form-group">
                   <label>E-mail professionnel</label>
                   <input
                     type="email"
@@ -718,7 +801,7 @@ export default function AdminPanel({
                         const isChecked = selectedCompanyIds.includes(comp.id);
                         return (
                           <label key={comp.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-main)' }}>
-                            <input 
+                            <input
                               type="checkbox"
                               checked={isChecked}
                               onChange={(e) => {
@@ -783,7 +866,7 @@ export default function AdminPanel({
               style={{ padding: '0.75rem 0.25rem' }}
             >
               <Users size={15} />
-              <span style={{ fontSize: '0.8rem' }}>Membres ({stepupUsers.length})</span>
+              <span style={{ fontSize: '0.8rem' }}>Membres ({filteredStepupUsers.length})</span>
             </button>
           </div>
 
@@ -860,7 +943,7 @@ export default function AdminPanel({
                       <th>Nom complet</th>
                       <th>Adresse e-mail</th>
                       <th>Rattachement</th>
-                      <th style={{ width: '50px', textAlign: 'center' }}>Modifier</th>
+                      <th style={{ width: '80px', textAlign: 'center' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -880,14 +963,26 @@ export default function AdminPanel({
                           )}
                         </td>
                         <td style={{ textAlign: 'center' }}>
-                          <button
-                            type="button"
-                            className="btn-option"
-                            style={{ padding: '0.4rem', background: 'rgba(25, 140, 204, 0.1)', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'var(--primary-color)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                            onClick={() => handleStartEditClient(client)}
-                          >
-                            <Edit size={14} />
-                          </button>
+                          <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
+                            <button
+                              type="button"
+                              className="btn-option"
+                              style={{ padding: '0.4rem', background: 'rgba(25, 140, 204, 0.1)', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'var(--primary-color)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                              onClick={() => handleStartEditClient(client)}
+                              title="Modifier"
+                            >
+                              <Edit size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-option"
+                              style={{ padding: '0.4rem', background: 'rgba(239, 68, 68, 0.1)', border: 'none', borderRadius: '4px', cursor: 'pointer', color: '#ef4444', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                              onClick={() => handleDeleteClient(client)}
+                              title="Supprimer"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -903,18 +998,18 @@ export default function AdminPanel({
 
             {/* LISTE 3 : MEMBRES STEP UP */}
             {activeListTab === 'stepup' && (
-              stepupUsers.length > 0 ? (
+              filteredStepupUsers.length > 0 ? (
                 <table className="admin-companies-table">
                   <thead>
                     <tr>
                       <th>Nom complet</th>
                       <th>Adresse e-mail</th>
                       <th>Rôle interne</th>
-                      <th style={{ width: '50px', textAlign: 'center' }}>Modifier</th>
+                      <th style={{ width: '80px', textAlign: 'center' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {stepupUsers.map(user => {
+                    {filteredStepupUsers.map(user => {
                       const userComps = user.company_ids ? companies.filter(c => user.company_ids.includes(c.id)).map(c => c.name) : [];
                       return (
                         <tr key={user.id}>
@@ -928,19 +1023,36 @@ export default function AdminPanel({
                           </td>
                           <td style={{ color: 'var(--text-muted)' }}>{user.email}</td>
                           <td>
-                            <span style={{ background: 'rgba(255,255,255,0.06)', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600 }}>
-                              {user.role}
-                            </span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                              <span style={{ background: 'rgba(255,255,255,0.06)', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600, display: 'inline-block', width: 'fit-content' }}>
+                                {user.role}
+                              </span>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--primary-color)', fontWeight: 600 }}>
+                                🔑 {user.user_role === 'super_manager' ? 'Super Manager' : (user.user_role === 'manager' ? 'Manager' : 'Collaborateur')}
+                              </span>
+                            </div>
                           </td>
                           <td style={{ textAlign: 'center' }}>
-                            <button
-                              type="button"
-                              className="btn-option"
-                              style={{ padding: '0.4rem', background: 'rgba(25, 140, 204, 0.1)', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'var(--primary-color)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                              onClick={() => handleStartEditStepup(user)}
-                            >
-                              <Edit size={14} />
-                            </button>
+                            <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
+                              <button
+                                type="button"
+                                className="btn-option"
+                                style={{ padding: '0.4rem', background: 'rgba(25, 140, 204, 0.1)', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'var(--primary-color)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                                onClick={() => handleStartEditStepup(user)}
+                                title="Modifier"
+                              >
+                                <Edit size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-option"
+                                style={{ padding: '0.4rem', background: 'rgba(239, 68, 68, 0.1)', border: 'none', borderRadius: '4px', cursor: 'pointer', color: '#ef4444', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                                onClick={() => handleDeleteStepupUser(user)}
+                                title="Supprimer"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );

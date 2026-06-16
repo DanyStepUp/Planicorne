@@ -98,7 +98,7 @@ export async function getMediaUrl(driveId, token, options = {}) {
 
       if (!isExpired) {
         if (isFallback) {
-          return `https://drive.google.com/thumbnail?sz=w1000&id=${driveId}`;
+          return `https://lh3.googleusercontent.com/d/${driveId}`;
         }
         // Return valid cached content
         const objectUrl = URL.createObjectURL(blob);
@@ -117,7 +117,7 @@ export async function getMediaUrl(driveId, token, options = {}) {
   // 3. Fallback or missing cache: Fetch from network and save to cache
   if (!token) {
     // No authorization token, return public link fallback (un-cached)
-    return `https://drive.google.com/thumbnail?sz=w1000&id=${driveId}`;
+    return `https://lh3.googleusercontent.com/d/${driveId}`;
   }
 
   try {
@@ -137,7 +137,7 @@ export async function getMediaUrl(driveId, token, options = {}) {
 
     // Silently catch and return public URL fallback
     console.info(`[MediaCache] Using public thumbnail fallback for ${driveId} (${err.message})`);
-    return `https://drive.google.com/thumbnail?sz=w1000&id=${driveId}`;
+    return `https://lh3.googleusercontent.com/d/${driveId}`;
   }
 }
 

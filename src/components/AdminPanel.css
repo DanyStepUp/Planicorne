@@ -232,29 +232,34 @@
 }
 
 .admin-logo-wrapper {
-  width: 36px;
-  height: 36px;
+  width: 50px;
+  height: 50px;
   border-radius: 50%;
   overflow: hidden;
   border: 1px solid var(--surface-border);
-  background: rgba(255, 255, 255, 0.05);
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  box-sizing: border-box;
 }
 
 .admin-logo-wrapper img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .admin-logo-fallback {
-  width: 36px;
-  height: 36px;
+  width: 50px;
+  height: 50px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   background: rgba(255, 255, 255, 0.04);
-  font-size: 1.1rem;
+  font-size: 1.5rem;
   border: 1px solid var(--surface-border);
 }
 

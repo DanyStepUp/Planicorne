@@ -29,14 +29,74 @@ import {
   fetchAllDatabaseData,
   getSetting,
   saveSetting,
-  refreshUserSession
+  refreshUserSession,
+  changeUserPassword
 } from './utils/supabaseService';
-import { X, AlertCircle, FileText, Database } from 'lucide-react';
+import { X, AlertCircle, FileText, Database, CheckCircle2 } from 'lucide-react';
 import './App.css';
 
 
 
 function App() {
+  // Password change state
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  
+  // URL Reset Token state
+  const [urlResetToken, setUrlResetToken] = useState(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('reset_token');
+    if (token) {
+      setUrlResetToken(token);
+    }
+  }, []);
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [changePwLoading, setChangePwLoading] = useState(false);
+  const [changePwError, setChangePwError] = useState(null);
+  const [changePwSuccess, setChangePwSuccess] = useState(null);
+
+  const handleChangePasswordSubmit = async (e) => {
+    e.preventDefault();
+    setChangePwError(null);
+    setChangePwSuccess(null);
+
+    if (newPassword.length < 6) {
+      setChangePwError("Le nouveau mot de passe doit contenir au moins 6 caractères.");
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      setChangePwError("Les nouveaux mots de passe ne correspondent pas.");
+      return;
+    }
+
+    setChangePwLoading(true);
+    try {
+      await changeUserPassword(currentUser.id, oldPassword, newPassword);
+      setChangePwSuccess("Votre mot de passe a été modifié avec succès !");
+      setOldPassword('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+      // Fermer le modal après 2 secondes
+      setTimeout(() => {
+        setIsChangePasswordOpen(false);
+        setChangePwSuccess(null);
+      }, 2000);
+    } catch (err) {
+      console.error(err);
+      if (err.message === 'invalid_current_password') {
+        setChangePwError("Le mot de passe actuel saisi est incorrect.");
+      } else {
+        setChangePwError("Une erreur est survenue. Assurez-vous d'avoir exécuté la migration SQL.");
+      }
+    } finally {
+      setChangePwLoading(false);
+    }
+  };
+
   const [activeTab, setActiveTab] = useState(() => {
     const cachedUser = JSON.parse(localStorage.getItem('app_user_session'));
     if (cachedUser) {
@@ -185,13 +245,19 @@ function App() {
         const users = await fetchStepupUsers();
         const comps = await fetchCompanies();
         setClients(cls);
-        setStepupUsers(users);
+        
+        // Filtrer les super_managers si l'utilisateur est un manager (rôle invisible pour le manager)
+        const filteredUsers = currentUser?.role?.trim().toLowerCase() === 'manager'
+          ? users.filter(u => u.user_role !== 'super_manager')
+          : users;
+
+        setStepupUsers(filteredUsers);
         setCompanies(comps);
       } catch (e) {
         console.error("Erreur de chargement des profils relationnels:", e);
       }
     }
-  }, [syncMode, supabaseConnected]);
+  }, [syncMode, supabaseConnected, currentUser]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -725,15 +791,48 @@ function App() {
     }
   };
 
-  // Refus par le client (fait défiler vers la section des commentaires)
-  const handleClientRefuse = () => {
-    const commentsEl = document.querySelector('.comments-section-container');
-    if (commentsEl) {
-      commentsEl.scrollIntoView({ behavior: 'smooth' });
-      setTimeout(() => {
-        const textarea = document.querySelector('.comment-textarea');
-        if (textarea) textarea.focus();
-      }, 500);
+  // Refus par le client (fait passer le post en statut 'draft' et retourne au tableau)
+  const handleClientRefuse = async () => {
+    if (!editingCardId) return;
+    const confirmRefuse = window.confirm("Voulez-vous refuser ce post et le renvoyer dans 'Idées / Brouillons' ?");
+    if (!confirmRefuse) return;
+
+    const commentText = window.prompt("Veuillez indiquer les modifications demandées (optionnel) :");
+    if (commentText === null) return; // Annulé
+
+    try {
+      const updatedCardData = { status: 'draft' };
+      if (syncMode === 'supabase') {
+        await updatePost(editingCardId, updatedCardData);
+        // Insérer un commentaire de refus
+        const fullComment = commentText.trim() 
+          ? `Modifications demandées : ${commentText.trim()}` 
+          : 'Modifications demandées';
+        
+        // Trouver l'ID de l'auteur client
+        const authorId = currentUser?.client_id || currentUser?.id;
+        if (authorId) {
+          await insertComment(editingCardId, authorId, 'client', fullComment);
+        }
+      }
+
+      const updatedCards = cards.map(c => {
+        if (c.id === editingCardId) {
+          return { ...c, status: 'draft', updatedAt: new Date().toISOString() };
+        }
+        return c;
+      });
+      setCards(updatedCards);
+      
+      alert("Le post a été renvoyé dans 'Idées / Brouillons'.");
+      
+      setEditingCardId(null);
+      setContent('');
+      setAttachments([]);
+      setActiveTab('board');
+    } catch (e) {
+      console.error("Erreur lors du refus client:", e);
+      alert("Erreur lors du refus du post.");
     }
   };
 
@@ -844,11 +943,29 @@ function App() {
         supabaseTableExists={supabaseTableExists}
         currentUser={currentUser}
         onLogout={handleLogout}
+        onChangePasswordClick={() => {
+          setIsChangePasswordOpen(true);
+          setChangePwError(null);
+          setChangePwSuccess(null);
+          setOldPassword('');
+          setNewPassword('');
+          setConfirmNewPassword('');
+        }}
       />
       
       <main className="main-content">
         {!currentUser ? (
-          <Login onLoginSuccess={handleLoginSuccess} />
+          <Login 
+            onLoginSuccess={handleLoginSuccess} 
+            resetToken={urlResetToken}
+            onClearResetToken={() => {
+              setUrlResetToken(null);
+              // Clean the URL query params
+              const url = new URL(window.location.href);
+              url.searchParams.delete('reset_token');
+              window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+            }}
+          />
         ) : (
           <>
         {/* BANNIÈRE DE PERMISSION POUR LE DOSSIER LOCAL */}
@@ -865,7 +982,7 @@ function App() {
         )}
 
         {/* BANNIÈRES SUPABASE */}
-        {currentUser?.role?.trim().toLowerCase() === 'admin' && syncMode === 'supabase' && hasLegacyCardsToMigrate && supabaseTableExists && (
+        {['admin', 'super_manager'].includes(currentUser?.role?.trim().toLowerCase()) && syncMode === 'supabase' && hasLegacyCardsToMigrate && supabaseTableExists && (
           <div className="permission-banner glass-panel animate-fade-in" style={{ borderColor: 'rgba(25, 140, 204, 0.4)', background: 'rgba(25, 140, 204, 0.05)', marginTop: '1rem' }}>
             <div className="permission-banner-text">
               <Database className="color-primary" style={{ color: 'var(--primary-color)' }} size={20} />
@@ -877,7 +994,7 @@ function App() {
           </div>
         )}
 
-        {currentUser?.role?.trim().toLowerCase() === 'admin' && syncMode === 'supabase' && !supabaseTableExists && (
+        {['admin', 'super_manager'].includes(currentUser?.role?.trim().toLowerCase()) && syncMode === 'supabase' && !supabaseTableExists && (
           <div className="permission-banner glass-panel animate-fade-in" style={{ borderColor: 'rgba(245, 158, 11, 0.4)', background: 'rgba(245, 158, 11, 0.05)', marginTop: '1rem' }}>
             <div className="permission-banner-text">
               <AlertCircle className="warning-icon" style={{ color: '#f59e0b' }} size={20} />
@@ -999,17 +1116,18 @@ function App() {
         )}
 
         {/* ONGLET 2.75 : ADMINISTRATION */}
-        {activeTab === 'admin_panel' && currentUser?.role?.trim().toLowerCase() === 'admin' && (
+        {activeTab === 'admin_panel' && ['admin', 'manager', 'super_manager'].includes(currentUser?.role?.trim().toLowerCase()) && (
           <AdminPanel 
             companies={companies}
             clients={clients}
             stepupUsers={stepupUsers}
             onRefreshData={loadProfiles}
+            currentUser={currentUser}
           />
         )}
 
         {/* ONGLET 3 : CONFIGURATION GOOGLE DRIVE */}
-        {activeTab === 'settings' && currentUser?.role?.trim().toLowerCase() === 'admin' && (
+        {activeTab === 'settings' && ['admin', 'super_manager'].includes(currentUser?.role?.trim().toLowerCase()) && (
           <DriveSettings 
             syncMode={syncMode}
             setSyncMode={setSyncMode}
@@ -1039,6 +1157,92 @@ function App() {
         )}
       </main>
 
+      {/* MODAL MODIFIER MOT DE PASSE */}
+      {isChangePasswordOpen && (
+        <div className="change-pw-modal-overlay animate-fade-in" onClick={() => setIsChangePasswordOpen(false)}>
+          <div className="change-pw-modal glass-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Modifier mon mot de passe</h3>
+              <button className="btn-close-modal" onClick={() => setIsChangePasswordOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            {changePwError && (
+              <div className="change-pw-error-badge">
+                <AlertCircle size={16} />
+                <span>{changePwError}</span>
+              </div>
+            )}
+
+            {changePwSuccess && (
+              <div className="change-pw-success-badge">
+                <CheckCircle2 size={16} />
+                <span>{changePwSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleChangePasswordSubmit} className="change-pw-form">
+              <div className="input-field">
+                <label htmlFor="old-password">Mot de passe actuel</label>
+                <input
+                  id="old-password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={oldPassword}
+                  onChange={(e) => setOldPassword(e.target.value)}
+                  required
+                  disabled={changePwLoading}
+                />
+              </div>
+
+              <div className="input-field">
+                <label htmlFor="new-password">Nouveau mot de passe</label>
+                <input
+                  id="new-password"
+                  type="password"
+                  placeholder="Minimum 6 caractères"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                  disabled={changePwLoading}
+                />
+              </div>
+
+              <div className="input-field">
+                <label htmlFor="confirm-new-password">Confirmer le nouveau mot de passe</label>
+                <input
+                  id="confirm-new-password"
+                  type="password"
+                  placeholder="Confirmez le nouveau mot de passe"
+                  value={confirmNewPassword}
+                  onChange={(e) => setConfirmNewPassword(e.target.value)}
+                  required
+                  disabled={changePwLoading}
+                />
+              </div>
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn-cancel"
+                  onClick={() => setIsChangePasswordOpen(false)}
+                  disabled={changePwLoading}
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  className="btn-submit"
+                  disabled={changePwLoading}
+                >
+                  {changePwLoading ? "Modification..." : "Modifier"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
