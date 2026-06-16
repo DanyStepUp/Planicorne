@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { MessageSquare, Send, Calendar } from 'lucide-react';
-import { getCommentsForPost, insertComment } from '../utils/supabaseService';
+import { MessageSquare, Send, Calendar, Edit2, Trash2, Check, X } from 'lucide-react';
+import { getCommentsForPost, insertComment, updateComment, deleteComment } from '../utils/supabaseService';
 import './CommentsSection.css';
 
 export default function CommentsSection({ postId, clients = [], stepupUsers = [], currentUser }) {
@@ -8,6 +8,11 @@ export default function CommentsSection({ postId, clients = [], stepupUsers = []
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
+
+  // States for comment editing
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [editingContent, setEditingContent] = useState('');
+  const [submittingEdit, setSubmittingEdit] = useState(false);
 
   // États pour le menu d'autocomplétion / tag @
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -115,6 +120,45 @@ export default function CommentsSection({ postId, clients = [], stepupUsers = []
       alert("Erreur lors de l'envoi du commentaire. Assurez-vous d'avoir exécuté la migration SQL.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const isCommentOwner = (c) => {
+    if (!currentUser) return false;
+    const role = currentUser.role?.trim().toLowerCase();
+    if (role === 'client') {
+      return currentUser.client_id && c.client_author_id === currentUser.client_id;
+    } else {
+      return currentUser.stepup_user_id && c.stepup_author_id === currentUser.stepup_user_id;
+    }
+  };
+
+  const handleSaveEdit = async (commentId) => {
+    if (!editingContent.trim()) return;
+    setSubmittingEdit(true);
+    try {
+      await updateComment(commentId, editingContent.trim());
+      setEditingCommentId(null);
+      setEditingContent('');
+      await loadComments();
+    } catch (err) {
+      console.error("Failed to update comment:", err);
+      alert("Erreur lors de la modification du commentaire.");
+    } finally {
+      setSubmittingEdit(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId) => {
+    const confirmDel = window.confirm("Voulez-vous supprimer ce commentaire ?");
+    if (!confirmDel) return;
+
+    try {
+      await deleteComment(commentId);
+      await loadComments();
+    } catch (err) {
+      console.error("Failed to delete comment:", err);
+      alert("Erreur lors de la suppression du commentaire.");
     }
   };
 
@@ -244,18 +288,76 @@ export default function CommentsSection({ postId, clients = [], stepupUsers = []
         ) : comments.length > 0 ? (
           comments.map(c => {
             const isStepup = c.authorType === 'Step Up';
+            const isOwner = isCommentOwner(c);
+            const isEditing = editingCommentId === c.id;
+
             return (
               <div key={c.id} className={`comment-bubble-wrapper ${isStepup ? 'stepup-comment' : 'client-comment'}`}>
-                <div className="comment-meta">
-                  <span className="comment-author">{c.authorName}</span>
-                  <span className={`comment-author-badge ${isStepup ? 'badge-stepup' : 'badge-client'}`}>
-                    {isStepup ? 'Step Up' : 'Client'}
-                  </span>
-                  {c.authorDetail && (
-                    <span className="comment-author-detail">• {c.authorDetail}</span>
+                <div className="comment-meta" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                    <span className="comment-author">{c.authorName}</span>
+                    <span className={`comment-author-badge ${isStepup ? 'badge-stepup' : 'badge-client'}`}>
+                      {isStepup ? 'Step Up' : 'Client'}
+                    </span>
+                    {c.authorDetail && (
+                      <span className="comment-author-detail">• {c.authorDetail}</span>
+                    )}
+                  </div>
+                  
+                  {isOwner && !isEditing && (
+                    <div className="comment-actions">
+                      <button 
+                        type="button"
+                        className="btn-comment-action" 
+                        onClick={() => { setEditingCommentId(c.id); setEditingContent(c.content); }}
+                        title="Modifier le commentaire"
+                      >
+                        <Edit2 size={13} />
+                      </button>
+                      <button 
+                        type="button"
+                        className="btn-comment-action btn-delete" 
+                        onClick={() => handleDeleteComment(c.id)}
+                        title="Supprimer le commentaire"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   )}
                 </div>
-                <div className="comment-content-text">{c.content}</div>
+
+                {isEditing ? (
+                  <div className="comment-edit-form">
+                    <textarea
+                      className="comment-edit-textarea"
+                      value={editingContent}
+                      onChange={(e) => setEditingContent(e.target.value)}
+                      required
+                      rows={2}
+                    />
+                    <div className="comment-edit-actions">
+                      <button
+                        type="button"
+                        className="btn-edit-action btn-edit-cancel"
+                        onClick={() => { setEditingCommentId(null); setEditingContent(''); }}
+                        disabled={submittingEdit}
+                      >
+                        <X size={12} /> Annuler
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-edit-action btn-edit-save"
+                        onClick={() => handleSaveEdit(c.id)}
+                        disabled={submittingEdit || !editingContent.trim()}
+                      >
+                        <Check size={12} /> Sauvegarder
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="comment-content-text">{c.content}</div>
+                )}
+
                 <div className="comment-timestamp">
                   <Calendar size={10} />
                   <span>{formatDate(c.createdAt)}</span>

@@ -215,3 +215,119 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Comment actions (edit/delete) and inline editing styles */
+.comment-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.btn-comment-action {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: var(--transition);
+}
+
+.btn-comment-action:hover {
+  color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="light"] .btn-comment-action:hover {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.btn-comment-action.btn-delete:hover {
+  color: #ef4444 !important;
+}
+
+.comment-edit-form {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.comment-edit-textarea {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem;
+  color: var(--text-main);
+  font-size: 0.875rem;
+  outline: none;
+  resize: vertical;
+  min-height: 60px;
+  transition: var(--transition);
+}
+
+[data-theme="light"] .comment-edit-textarea {
+  background: rgba(0, 0, 0, 0.01);
+}
+
+.comment-edit-textarea:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(25, 140, 204, 0.2);
+}
+
+.comment-edit-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.btn-edit-action {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.btn-edit-cancel {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--surface-border);
+  color: var(--text-main);
+}
+
+[data-theme="light"] .btn-edit-cancel {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.btn-edit-cancel:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="light"] .btn-edit-cancel:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.btn-edit-save {
+  background: var(--primary-color);
+  border: none;
+  color: #ffffff;
+}
+
+.btn-edit-save:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.btn-edit-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

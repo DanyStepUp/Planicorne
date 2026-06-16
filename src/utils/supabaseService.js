@@ -243,7 +243,9 @@ export async function getCommentsForPost(postId) {
       createdAt: comment.createdAt,
       authorName,
       authorType,
-      authorDetail
+      authorDetail,
+      client_author_id: comment.client_author_id,
+      stepup_author_id: comment.stepup_author_id
     };
   });
 }
@@ -274,6 +276,37 @@ export async function insertComment(postId, authorId, authorType, content) {
     throw error;
   }
   return data ? data[0] : null;
+}
+
+/**
+ * Updates an existing comment in the Supabase database.
+ */
+export async function updateComment(commentId, content) {
+  const { data, error } = await supabase
+    .from('comments')
+    .update({ content })
+    .eq('id', commentId)
+    .select();
+
+  if (error) {
+    throw error;
+  }
+  return data ? data[0] : null;
+}
+
+/**
+ * Deletes a comment from the Supabase database by ID.
+ */
+export async function deleteComment(commentId) {
+  const { error } = await supabase
+    .from('comments')
+    .delete()
+    .eq('id', commentId);
+
+  if (error) {
+    throw error;
+  }
+  return true;
 }
 
 export async function authenticateUser(email, password) {
