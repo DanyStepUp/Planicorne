@@ -131,6 +131,82 @@ export default function Board({
     }).length;
   };
 
+  // Helper functions for date operations
+  const formatDateToYYYYMMDD = (date) => {
+    const d = new Date(date);
+    const month = '' + (d.getMonth() + 1);
+    const day = '' + d.getDate();
+    const year = d.getFullYear();
+    return [year, month.padStart(2, '0'), day.padStart(2, '0')].join('-');
+  };
+
+  const addDays = (date, days) => {
+    const result = new Date(date);
+    result.setDate(result.getDate() + days);
+    return result;
+  };
+
+  const [startDateStr, setStartDateStr] = useState(() => {
+    const now = new Date();
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+    return formatDateToYYYYMMDD(firstDay);
+  });
+
+  const [endDateStr, setEndDateStr] = useState(() => {
+    const now = new Date();
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = addDays(firstDay, 90); // 3 months default
+    return formatDateToYYYYMMDD(end);
+  });
+
+  const [includeUnscheduled, setIncludeUnscheduled] = useState(true);
+
+  const handleStartDateChange = (e) => {
+    const newStartStr = e.target.value;
+    if (!newStartStr) return;
+    setStartDateStr(newStartStr);
+
+    const newStart = new Date(newStartStr);
+    if (isNaN(newStart.getTime())) return;
+    const currentEnd = new Date(endDateStr);
+    if (isNaN(currentEnd.getTime())) return;
+    
+    if (newStart > currentEnd) {
+      const newEnd = addDays(newStart, 90);
+      setEndDateStr(formatDateToYYYYMMDD(newEnd));
+    } else {
+      const diffTime = currentEnd.getTime() - newStart.getTime();
+      const diffDays = diffTime / (1000 * 60 * 60 * 24);
+      if (diffDays > 92) {
+        const newEnd = addDays(newStart, 92);
+        setEndDateStr(formatDateToYYYYMMDD(newEnd));
+      }
+    }
+  };
+
+  const handleEndDateChange = (e) => {
+    const newEndStr = e.target.value;
+    if (!newEndStr) return;
+    setEndDateStr(newEndStr);
+
+    const newEnd = new Date(newEndStr);
+    if (isNaN(newEnd.getTime())) return;
+    const currentStart = new Date(startDateStr);
+    if (isNaN(currentStart.getTime())) return;
+
+    if (newEnd < currentStart) {
+      const newStart = addDays(newEnd, -90);
+      setStartDateStr(formatDateToYYYYMMDD(newStart));
+    } else {
+      const diffTime = newEnd.getTime() - currentStart.getTime();
+      const diffDays = diffTime / (1000 * 60 * 60 * 24);
+      if (diffDays > 92) {
+        const newStart = addDays(newEnd, -92);
+        setStartDateStr(formatDateToYYYYMMDD(newStart));
+      }
+    }
+  };
+
   // --- FILTRAGE DES CARTES ---
   const filteredCards = cards.filter(card => {
     const matchesSearch =
@@ -146,7 +222,27 @@ export default function Board({
       selectedCompanyFilter === 'all' ||
       card.company_id === selectedCompanyFilter;
 
-    return matchesSearch && matchesPlatform && matchesCompany;
+    // Filter by Date Range
+    let matchesDate = false;
+    if (card.scheduledAt) {
+      try {
+        const cardDate = new Date(card.scheduledAt);
+        const start = new Date(startDateStr);
+        start.setHours(0, 0, 0, 0);
+        
+        const end = new Date(endDateStr);
+        end.setHours(23, 59, 59, 999);
+        
+        matchesDate = cardDate >= start && cardDate <= end;
+      } catch (e) {
+        console.error("Error parsing card date:", e);
+        matchesDate = includeUnscheduled;
+      }
+    } else {
+      matchesDate = includeUnscheduled;
+    }
+
+    return matchesSearch && matchesPlatform && matchesCompany && matchesDate;
   });
 
   // --- GESTION DU DRAG-AND-DROP ---
@@ -370,7 +466,7 @@ export default function Board({
   };
 
   return (
-    <div className={`board-layout-container ${!isClient ? 'has-sidebar' : ''} animate-fade-in`}>
+    <div className={`board-layout-container ${!isClient ? 'has-sidebar' : ''} ${isClient ? 'is-client-board' : ''} animate-fade-in`}>
       {/* SIDEBAR POUR STEP UP / ADMIN */}
       {!isClient && (
         <aside className={`board-sidebar glass-panel ${isSidebarExpanded ? 'expanded' : 'collapsed'}`}>
@@ -573,50 +669,87 @@ export default function Board({
           </div>
         )}
 
-        {/* CONTROLES (RECHERCHE + FILTRES PAR CANAL) */}
+        {/* CONTROLES (RECHERCHE + FILTRES PAR CANAL + FILTRE DATE) */}
         <div className="board-controls-panel glass-panel">
-          <div className="search-box-wrapper">
-            <Search size={18} className="search-icon" />
-            <input
-              type="text"
-              placeholder="Rechercher un post par titre ou contenu..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="board-search-input"
-            />
+          <div className="board-controls-row">
+            <div className="search-box-wrapper">
+              <Search size={18} className="search-icon" />
+              <input
+                type="text"
+                placeholder="Rechercher un post par titre ou contenu..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="board-search-input"
+              />
+            </div>
+
+            <div className="filter-pills-row">
+              <span className="filter-label"><Filter size={14} /> Filtrer :</span>
+              <button
+                className={`filter-pill ${selectedPlatformFilter === 'all' ? 'active' : ''}`}
+                onClick={() => setSelectedPlatformFilter('all')}
+              >
+                Tous
+              </button>
+              {['linkedin', 'facebook', 'instagram', 'google', 'blog', 'newsletter'].map(plat => {
+                const Icon = PLATFORM_ICONS[plat];
+                return (
+                  <button
+                    key={plat}
+                    className={`filter-pill ${selectedPlatformFilter === plat ? 'active' : ''}`}
+                    style={{
+                      '--pill-hover-color': PLATFORM_COLORS[plat],
+                      borderColor: selectedPlatformFilter === plat ? PLATFORM_COLORS[plat] : 'transparent',
+                      background: selectedPlatformFilter === plat ? `rgba(${plat === 'linkedin' ? '25,140,204' : '255,255,255'}, 0.1)` : ''
+                    }}
+                    onClick={() => setSelectedPlatformFilter(plat)}
+                  >
+                    {Icon && <Icon size={14} style={{ color: PLATFORM_COLORS[plat] }} />}
+                    {PLATFORM_LABELS[plat]}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="filter-pills-row">
-            <span className="filter-label"><Filter size={14} /> Filtrer :</span>
-            <button
-              className={`filter-pill ${selectedPlatformFilter === 'all' ? 'active' : ''}`}
-              onClick={() => setSelectedPlatformFilter('all')}
-            >
-              Tous
-            </button>
-            {['linkedin', 'facebook', 'instagram', 'google', 'blog', 'newsletter'].map(plat => {
-              const Icon = PLATFORM_ICONS[plat];
-              return (
-                <button
-                  key={plat}
-                  className={`filter-pill ${selectedPlatformFilter === plat ? 'active' : ''}`}
-                  style={{
-                    '--pill-hover-color': PLATFORM_COLORS[plat],
-                    borderColor: selectedPlatformFilter === plat ? PLATFORM_COLORS[plat] : 'transparent',
-                    background: selectedPlatformFilter === plat ? `rgba(${plat === 'linkedin' ? '25,140,204' : '255,255,255'}, 0.1)` : ''
-                  }}
-                  onClick={() => setSelectedPlatformFilter(plat)}
-                >
-                  {Icon && <Icon size={14} style={{ color: PLATFORM_COLORS[plat] }} />}
-                  {PLATFORM_LABELS[plat]}
-                </button>
-              );
-            })}
+          <div className="board-controls-row board-date-filter-row">
+            <div className="board-date-filter-container">
+              <div className="date-input-group">
+                <label htmlFor="board-start-date">Du :</label>
+                <input
+                  id="board-start-date"
+                  type="date"
+                  value={startDateStr}
+                  onChange={handleStartDateChange}
+                  className="board-date-input"
+                />
+              </div>
+              <div className="date-input-group">
+                <label htmlFor="board-end-date">Au :</label>
+                <input
+                  id="board-end-date"
+                  type="date"
+                  value={endDateStr}
+                  onChange={handleEndDateChange}
+                  className="board-date-input"
+                />
+              </div>
+              <label className="include-unscheduled-label">
+                <input
+                  type="checkbox"
+                  checked={includeUnscheduled}
+                  onChange={(e) => setIncludeUnscheduled(e.target.checked)}
+                  className="board-checkbox"
+                />
+                <span>Inclure les posts sans date</span>
+              </label>
+              <span className="date-range-hint">(Période max. 3 mois)</span>
+            </div>
           </div>
         </div>
 
         {/* GRILLE DE COLONNES KANBAN */}
-        <div className="kanban-grid" style={isClient ? { gridTemplateColumns: '1fr', maxWidth: '480px', margin: '0 auto' } : {}}>
+        <div className={`kanban-grid ${isClient ? 'client-kanban-grid' : ''}`}>
           {activeColumns.map(col => {
             const colCards = filteredCards.filter(c => c.status === col.id);
             const isOver = draggedOverColumn === col.id;

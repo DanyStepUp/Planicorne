@@ -910,3 +910,116 @@
   gap: 1.5rem;
   min-width: 0;
 }
+
+/* Client single column ergonomics on PC */
+.client-kanban-grid {
+  grid-template-columns: 1fr;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.is-client-board .column-cards-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.25rem;
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .client-kanban-grid {
+    max-width: 480px;
+  }
+  .is-client-board .column-cards-list {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+/* Date filter styling */
+.board-controls-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.5rem;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.board-date-filter-row {
+  border-top: 1px solid var(--surface-border);
+  padding-top: 1rem;
+  margin-top: 0.5rem;
+}
+
+.board-date-filter-container {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.date-input-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.date-input-group label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.board-date-input {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--surface-border);
+  padding: 0.45rem 0.75rem;
+  border-radius: var(--radius-md);
+  color: var(--text-main);
+  font-size: 0.85rem;
+  outline: none;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+[data-theme="light"] .board-date-input {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.board-date-input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(25, 140, 204, 0.2);
+}
+
+.include-unscheduled-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-main);
+  cursor: pointer;
+}
+
+.board-checkbox {
+  accent-color: var(--primary-color);
+  cursor: pointer;
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.date-range-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-left: auto;
+}
+
+@media (max-width: 768px) {
+  .date-range-hint {
+    margin-left: 0;
+    width: 100%;
+  }
+}

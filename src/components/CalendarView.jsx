@@ -32,6 +32,10 @@ export default function CalendarView({
   const [currentDate, setCurrentDate] = useState(new Date());
   const isClient = currentUser?.role?.trim().toLowerCase() === 'client';
 
+  const effectiveFilter = (!isClient && selectedCompanyFilter === 'all' && companies.length > 0)
+    ? companies[0].id
+    : selectedCompanyFilter;
+
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
 
@@ -104,7 +108,7 @@ export default function CalendarView({
       if (cardDate.toDateString() !== cellStr) return false;
 
       // Filter by company/client
-      if (!isClient && selectedCompanyFilter !== 'all' && card.company_id !== selectedCompanyFilter) {
+      if (!isClient && card.company_id !== effectiveFilter) {
         return false;
       }
       return true;
@@ -119,7 +123,7 @@ export default function CalendarView({
     onAddCard({
       scheduledAt: scheduled.toISOString(),
       status: 'draft',
-      company_id: selectedCompanyFilter !== 'all' ? selectedCompanyFilter : (companies.length > 0 ? companies[0].id : '')
+      company_id: effectiveFilter
     });
   };
 
@@ -135,7 +139,7 @@ export default function CalendarView({
         {!isClient && companies && companies.length > 0 && (
           <div className="calendar-company-filter" style={{ minWidth: '220px' }}>
             <select
-              value={selectedCompanyFilter}
+              value={effectiveFilter}
               onChange={(e) => setSelectedCompanyFilter(e.target.value)}
               style={{
                 width: '100%',
@@ -151,7 +155,6 @@ export default function CalendarView({
                 transition: 'var(--transition)'
               }}
             >
-              <option value="all" style={{ background: 'var(--surface-color)' }}>🏢 Tous les clients</option>
               {companies.map(comp => (
                 <option key={comp.id} value={comp.id} style={{ background: 'var(--surface-color)' }}>
                   🏢 {comp.name}

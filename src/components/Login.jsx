@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Mail, Lock, ShieldAlert, LogIn, ChevronLeft, RefreshCw, CheckCircle2, ShieldCheck, ExternalLink } from 'lucide-react';
+import { Mail, Lock, ShieldAlert, LogIn, ChevronLeft, RefreshCw, CheckCircle2, ShieldCheck, ExternalLink, Eye, EyeOff } from 'lucide-react';
 import { authenticateUser, setResetToken, resetPasswordByToken, sendResetEmailViaRpc } from '../utils/supabaseService';
 import './Login.css';
 
@@ -17,6 +17,11 @@ export default function Login({ onLoginSuccess, resetToken, onClearResetToken })
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
   const [devCode, setDevCode] = useState(null);
+
+  // Password visibility states
+  const [showPassword, setShowPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
     if (resetToken) {
@@ -227,16 +232,25 @@ export default function Login({ onLoginSuccess, resetToken, onClearResetToken })
                   Mot de passe oublié ?
                 </button>
               </div>
-              <div className="input-with-icon">
+              <div className="input-with-icon password-input-container">
                 <Lock size={16} className="input-icon" />
                 <input 
                   id="login-password"
-                  type="password" 
+                  type={showPassword ? "text" : "password"} 
                   placeholder="••••••••" 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  style={{ paddingRight: '2.5rem' }}
                 />
+                <button
+                  type="button"
+                  className="password-toggle-btn"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
             </div>
 
@@ -309,31 +323,49 @@ export default function Login({ onLoginSuccess, resetToken, onClearResetToken })
 
             <div className="login-input-field">
               <label htmlFor="reset-password">Nouveau mot de passe</label>
-              <div className="input-with-icon">
+              <div className="input-with-icon password-input-container">
                 <Lock size={16} className="input-icon" />
                 <input 
                   id="reset-password"
-                  type="password" 
+                  type={showNewPassword ? "text" : "password"} 
                   placeholder="Minimum 6 caractères" 
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   required
+                  style={{ paddingRight: '2.5rem' }}
                 />
+                <button
+                  type="button"
+                  className="password-toggle-btn"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  aria-label={showNewPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                >
+                  {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
             </div>
 
             <div className="login-input-field">
               <label htmlFor="reset-confirm">Confirmer le mot de passe</label>
-              <div className="input-with-icon">
+              <div className="input-with-icon password-input-container">
                 <Lock size={16} className="input-icon" />
                 <input 
                   id="reset-confirm"
-                  type="password" 
+                  type={showConfirmPassword ? "text" : "password"} 
                   placeholder="Confirmez le nouveau mot de passe" 
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
+                  style={{ paddingRight: '2.5rem' }}
                 />
+                <button
+                  type="button"
+                  className="password-toggle-btn"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  aria-label={showConfirmPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                >
+                  {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
             </div>
 

@@ -32,7 +32,7 @@ import {
   refreshUserSession,
   changeUserPassword
 } from './utils/supabaseService';
-import { X, AlertCircle, FileText, Database, CheckCircle2 } from 'lucide-react';
+import { X, AlertCircle, FileText, Database, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import './App.css';
 
 
@@ -54,6 +54,9 @@ function App() {
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [showOldPassword, setShowOldPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
   const [changePwLoading, setChangePwLoading] = useState(false);
   const [changePwError, setChangePwError] = useState(null);
   const [changePwSuccess, setChangePwSuccess] = useState(null);
@@ -153,6 +156,32 @@ function App() {
   
   // Session Utilisateur
   const [currentUser, setCurrentUser] = useState(JSON.parse(localStorage.getItem('app_user_session')) || null);
+
+  // PWA Install Prompt State
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+      }
+    } else {
+      alert("Pour installer l'application :\n\n• Sur Chrome / Edge / Firefox (PC ou Android) : Cliquez sur l'icône d'installation dans la barre d'adresse ou ouvrez le menu et sélectionnez 'Installer'.\n\n• Sur Safari (iOS - iPhone/iPad) : Cliquez sur le bouton 'Partager' (flèche vers le haut) et sélectionnez 'Sur l'écran d'accueil'.");
+    }
+  };
 
   // États Supabase
   const [supabaseConnected, setSupabaseConnected] = useState(false);
@@ -943,6 +972,7 @@ function App() {
         supabaseTableExists={supabaseTableExists}
         currentUser={currentUser}
         onLogout={handleLogout}
+        onInstallApp={handleInstallApp}
         onChangePasswordClick={() => {
           setIsChangePasswordOpen(true);
           setChangePwError(null);
@@ -1185,41 +1215,119 @@ function App() {
             <form onSubmit={handleChangePasswordSubmit} className="change-pw-form">
               <div className="input-field">
                 <label htmlFor="old-password">Mot de passe actuel</label>
-                <input
-                  id="old-password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={oldPassword}
-                  onChange={(e) => setOldPassword(e.target.value)}
-                  required
-                  disabled={changePwLoading}
-                />
+                <div className="password-input-container" style={{ position: 'relative', width: '100%' }}>
+                  <input
+                    id="old-password"
+                    type={showOldPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={oldPassword}
+                    onChange={(e) => setOldPassword(e.target.value)}
+                    required
+                    disabled={changePwLoading}
+                    style={{ paddingRight: '2.5rem', width: '100%' }}
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle-btn"
+                    onClick={() => setShowOldPassword(!showOldPassword)}
+                    aria-label={showOldPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                    style={{
+                      position: 'absolute',
+                      right: '0.75rem',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '0.25rem',
+                      zIndex: 10
+                    }}
+                  >
+                    {showOldPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
 
               <div className="input-field">
                 <label htmlFor="new-password">Nouveau mot de passe</label>
-                <input
-                  id="new-password"
-                  type="password"
-                  placeholder="Minimum 6 caractères"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  required
-                  disabled={changePwLoading}
-                />
+                <div className="password-input-container" style={{ position: 'relative', width: '100%' }}>
+                  <input
+                    id="new-password"
+                    type={showNewPassword ? "text" : "password"}
+                    placeholder="Minimum 6 caractères"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    required
+                    disabled={changePwLoading}
+                    style={{ paddingRight: '2.5rem', width: '100%' }}
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle-btn"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    aria-label={showNewPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                    style={{
+                      position: 'absolute',
+                      right: '0.75rem',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '0.25rem',
+                      zIndex: 10
+                    }}
+                  >
+                    {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
 
               <div className="input-field">
                 <label htmlFor="confirm-new-password">Confirmer le nouveau mot de passe</label>
-                <input
-                  id="confirm-new-password"
-                  type="password"
-                  placeholder="Confirmez le nouveau mot de passe"
-                  value={confirmNewPassword}
-                  onChange={(e) => setConfirmNewPassword(e.target.value)}
-                  required
-                  disabled={changePwLoading}
-                />
+                <div className="password-input-container" style={{ position: 'relative', width: '100%' }}>
+                  <input
+                    id="confirm-new-password"
+                    type={showConfirmNewPassword ? "text" : "password"}
+                    placeholder="Confirmez le nouveau mot de passe"
+                    value={confirmNewPassword}
+                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                    required
+                    disabled={changePwLoading}
+                    style={{ paddingRight: '2.5rem', width: '100%' }}
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle-btn"
+                    onClick={() => setShowConfirmNewPassword(!showConfirmNewPassword)}
+                    aria-label={showConfirmNewPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                    style={{
+                      position: 'absolute',
+                      right: '0.75rem',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '0.25rem',
+                      zIndex: 10
+                    }}
+                  >
+                    {showConfirmNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
 
               <div className="modal-actions">

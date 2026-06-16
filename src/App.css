@@ -310,3 +310,17 @@
   cursor: not-allowed;
 }
 
+/* Password Toggle Hover Effects for Change Password Modal */
+.change-pw-form .password-toggle-btn {
+  transition: color 0.2s ease, transform 0.2s ease !important;
+}
+
+.change-pw-form .password-toggle-btn:hover {
+  color: var(--primary-color) !important;
+  transform: translateY(-50%) scale(1.1) !important;
+}
+
+.change-pw-form .password-toggle-btn:active {
+  transform: translateY(-50%) scale(0.95) !important;
+}
+
