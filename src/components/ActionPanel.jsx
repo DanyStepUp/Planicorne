@@ -8,6 +8,7 @@ export default function ActionPanel({
   isEditingExistingCard, 
   readOnly = false,
   isClient = false,
+  cardStatus = 'draft',
   onClientValidate,
   onClientRefuse
 }) {
@@ -24,7 +25,7 @@ export default function ActionPanel({
     <div className="action-panel glass-panel animate-fade-in" style={{ animationDelay: '0.4s' }}>
       
       {/* BOUTONS ACTIONS CLIENT (uniquement pour les cartes existantes à valider) */}
-      {isClient && isEditingExistingCard && (
+      {isClient && isEditingExistingCard && cardStatus === 'validate' && (
         <>
           <button 
             type="button"

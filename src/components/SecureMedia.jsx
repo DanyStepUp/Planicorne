@@ -17,7 +17,7 @@ export default function SecureMedia({ src, driveId, type, className, alt, style,
     if (isVideoPlayer && mimeType?.startsWith('video/')) {
       return `https://drive.google.com/file/d/${driveId}/preview`;
     }
-    return src || `https://lh3.googleusercontent.com/d/${driveId}`;
+    return src || `https://lh3.googleusercontent.com/d/${driveId}=s1000`;
   });
 
   useEffect(() => {
@@ -54,7 +54,7 @@ export default function SecureMedia({ src, driveId, type, className, alt, style,
         console.debug("Info loading secure cached media fallback:", err.message);
         if (isMounted) {
           // Fallback to direct public CDN link if caching/fetching fails
-          setMediaUrl(src || `https://lh3.googleusercontent.com/d/${driveId}`);
+          setMediaUrl(src || `https://lh3.googleusercontent.com/d/${driveId}=s1000`);
         }
       }
     };
@@ -118,8 +118,8 @@ export default function SecureMedia({ src, driveId, type, className, alt, style,
         // Fallbacks if Google rejects the thumbnail link or blob fails
         if (src && e.target.src !== src) {
           e.target.src = src;
-        } else if (driveId && e.target.src !== `https://lh3.googleusercontent.com/d/${driveId}`) {
-          e.target.src = `https://lh3.googleusercontent.com/d/${driveId}`;
+        } else if (driveId && !e.target.src.includes(`https://lh3.googleusercontent.com/d/${driveId}=s1000`)) {
+          e.target.src = `https://lh3.googleusercontent.com/d/${driveId}=s1000`;
         } else if (alt && alt.toLowerCase().includes('step up') && e.target.src !== '/Logo Step Up.png') {
           e.target.src = '/Logo Step Up.png';
         } else {

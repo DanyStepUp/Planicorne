@@ -106,8 +106,9 @@ export default function Board({
     }
   }, [companies, selectedCompanyFilter, isClient]);
 
+  const clientVisibleBoards = currentUser?.visible_boards || ['validate'];
   const activeColumns = isClient
-    ? COLUMNS.filter(col => col.id === 'validate')
+    ? COLUMNS.filter(col => clientVisibleBoards.includes(col.id))
     : COLUMNS;
 
   const clientCompany = companies.find(c => c.id === currentUser?.company_id);
@@ -155,7 +156,7 @@ export default function Board({
   const [endDateStr, setEndDateStr] = useState(() => {
     const now = new Date();
     const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-    const end = addDays(firstDay, 90); // 3 months default
+    const end = addDays(firstDay, 31); // 1 month default (31 days)
     return formatDateToYYYYMMDD(end);
   });
 
@@ -172,13 +173,13 @@ export default function Board({
     if (isNaN(currentEnd.getTime())) return;
     
     if (newStart > currentEnd) {
-      const newEnd = addDays(newStart, 90);
+      const newEnd = addDays(newStart, 31);
       setEndDateStr(formatDateToYYYYMMDD(newEnd));
     } else {
       const diffTime = currentEnd.getTime() - newStart.getTime();
       const diffDays = diffTime / (1000 * 60 * 60 * 24);
-      if (diffDays > 92) {
-        const newEnd = addDays(newStart, 92);
+      if (diffDays > 31) {
+        const newEnd = addDays(newStart, 31);
         setEndDateStr(formatDateToYYYYMMDD(newEnd));
       }
     }
@@ -195,13 +196,13 @@ export default function Board({
     if (isNaN(currentStart.getTime())) return;
 
     if (newEnd < currentStart) {
-      const newStart = addDays(newEnd, -90);
+      const newStart = addDays(newEnd, -31);
       setStartDateStr(formatDateToYYYYMMDD(newStart));
     } else {
       const diffTime = newEnd.getTime() - currentStart.getTime();
       const diffDays = diffTime / (1000 * 60 * 60 * 24);
-      if (diffDays > 92) {
-        const newStart = addDays(newEnd, -92);
+      if (diffDays > 31) {
+        const newStart = addDays(newEnd, -31);
         setStartDateStr(formatDateToYYYYMMDD(newStart));
       }
     }
@@ -305,10 +306,10 @@ export default function Board({
 
   // --- ENREGISTRER UNE NOUVELLE CARTE RAPIDE ---
   const handleQuickAdd = (columnId) => {
-    if (isClient) return;
+    if (isClient && !(columnId === 'draft' && clientVisibleBoards.includes('draft'))) return;
     onAddCard({
       status: columnId,
-      company_id: selectedCompanyFilter !== 'all' ? selectedCompanyFilter : (companies.length > 0 ? companies[0].id : '')
+      company_id: isClient ? currentUser.company_id : (selectedCompanyFilter !== 'all' ? selectedCompanyFilter : (companies.length > 0 ? companies[0].id : ''))
     });
   };
 
@@ -743,7 +744,7 @@ export default function Board({
                 />
                 <span>Inclure les posts sans date</span>
               </label>
-              <span className="date-range-hint">(Période max. 3 mois)</span>
+              <span className="date-range-hint">(Période max. 1 mois)</span>
             </div>
           </div>
         </div>
@@ -771,7 +772,7 @@ export default function Board({
                     <span className="cards-badge">{colCards.length}</span>
                   </div>
 
-                  {!isClient && (
+                  {(!isClient || (col.id === 'draft' && clientVisibleBoards.includes('draft'))) && (
                     <button
                       className="btn-add-card-quick"
                       onClick={() => handleQuickAdd(col.id)}
@@ -843,7 +844,7 @@ export default function Board({
                               )}
                             </div>
 
-                            {!isClient && (
+                            {(!isClient || (card.status === 'draft' && clientVisibleBoards.includes('draft'))) && (
                               <div className="card-menu-container">
                                 <button
                                   className="btn-card-menu-trigger"

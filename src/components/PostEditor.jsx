@@ -25,6 +25,7 @@ export default function PostEditor({
   attachments = [],
   onUpdateAttachments,
   readOnly = false,
+  isClient = false,
   scheduledAt,
   onUpdateScheduledAt
 }) {
@@ -150,7 +151,7 @@ export default function PostEditor({
     const shouldBeCover = !hasCover;
 
     // Use thumbnail link for preview, or direct render link
-    const dataUrl = `https://lh3.googleusercontent.com/d/${driveId}`;
+    const dataUrl = `https://lh3.googleusercontent.com/d/${driveId}=s1000`;
 
     const newAttachment = {
       id: 'att-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
@@ -319,7 +320,7 @@ export default function PostEditor({
             <select
               value={companyId}
               onChange={(e) => onChangeCompanyId(e.target.value)}
-              disabled={readOnly}
+              disabled={readOnly || isClient}
               style={{
                 padding: '0.6rem 0.8rem',
                 borderRadius: 'var(--radius-md)',

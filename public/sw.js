@@ -1,9 +1,12 @@
-const CACHE_NAME = 'planicorne-v1';
+const CACHE_NAME = 'planicorne-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/Logo Step Up.png',
-  '/manifest.json'
+  '/manifest.json',
+  '/Icone.png',
+  '/pwa-192.png',
+  '/pwa-512.png'
 ];
 
 // Install Event
@@ -35,6 +38,12 @@ self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
 
   const url = e.request.url;
+
+  // Only intercept standard http/https schemes (ignore chrome-extensions, etc.)
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    return;
+  }
+
   // Ignore Supabase, Google APIs & Auth calls
   if (url.includes('supabase.co') || url.includes('googleapis.com') || url.includes('googleusercontent.com')) {
     return;

@@ -438,7 +438,8 @@ function App() {
     sql += `  id text PRIMARY KEY,\n`;
     sql += `  name text NOT NULL,\n`;
     sql += `  email text UNIQUE NOT NULL,\n`;
-    sql += `  company_id text REFERENCES public.companies(id) ON DELETE SET NULL\n`;
+    sql += `  company_id text REFERENCES public.companies(id) ON DELETE SET NULL,\n`;
+    sql += `  visible_boards text[] DEFAULT ARRAY['validate']\n`;
     sql += `);\n\n`;
 
     if (data.clients && data.clients.length > 0) {
@@ -446,8 +447,11 @@ function App() {
         const name = row.name ? `'${row.name.replace(/'/g, "''")}'` : 'NULL';
         const email = row.email ? `'${row.email.replace(/'/g, "''")}'` : 'NULL';
         const compId = row.company_id ? `'${row.company_id}'` : 'NULL';
-        sql += `INSERT INTO public.clients (id, name, email, company_id) VALUES ('${row.id}', ${name}, ${email}, ${compId}) `;
-        sql += `ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email, company_id = EXCLUDED.company_id;\n`;
+        const boardsVal = row.visible_boards && row.visible_boards.length > 0
+          ? `ARRAY[${row.visible_boards.map(b => `'${b}'`).join(',')}]::text[]`
+          : "DEFAULT";
+        sql += `INSERT INTO public.clients (id, name, email, company_id, visible_boards) VALUES ('${row.id}', ${name}, ${email}, ${compId}, ${boardsVal}) `;
+        sql += `ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email, company_id = EXCLUDED.company_id, visible_boards = EXCLUDED.visible_boards;\n`;
       });
       sql += `\n`;
     }
@@ -1086,7 +1090,8 @@ function App() {
                 platform={selectedPlatform} 
                 attachments={attachments}
                 onUpdateAttachments={setAttachments}
-                readOnly={currentUser?.role?.trim().toLowerCase() === 'client'}
+                readOnly={currentUser?.role?.trim().toLowerCase() === 'client' && editingStatus !== 'draft'}
+                isClient={currentUser?.role?.trim().toLowerCase() === 'client'}
                 scheduledAt={scheduledAt}
                 onUpdateScheduledAt={setScheduledAt}
               />
@@ -1106,8 +1111,9 @@ function App() {
               content={content} 
               onSaveToTrello={handleDirectSave}
               isEditingExistingCard={!!editingCardId}
-              readOnly={currentUser?.role?.trim().toLowerCase() === 'client'}
+              readOnly={currentUser?.role?.trim().toLowerCase() === 'client' && editingStatus !== 'draft'}
               isClient={currentUser?.role?.trim().toLowerCase() === 'client'}
+              cardStatus={editingStatus}
               onClientValidate={handleClientValidate}
               onClientRefuse={handleClientRefuse}
             />

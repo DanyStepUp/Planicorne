@@ -153,7 +153,7 @@ export async function migrateLegacyCards(cards) {
 export async function fetchClients() {
   const { data, error } = await supabase
     .from('clients')
-    .select('id, name, email, company_id, companies(name)');
+    .select('id, name, email, company_id, visible_boards, companies(name)');
   
   if (error) {
     throw error;
@@ -339,7 +339,8 @@ async function authenticateUserFallback(email, password) {
       client_id,
       stepup_user_id,
       clients (
-        company_id
+        company_id,
+        visible_boards
       )
     `)
     .eq('email', email)
@@ -352,6 +353,7 @@ async function authenticateUserFallback(email, password) {
 
   if (data && data.clients) {
     data.company_id = data.clients.company_id;
+    data.visible_boards = data.clients.visible_boards;
   }
 
   return data;
@@ -390,7 +392,8 @@ async function refreshUserSessionFallback(userId) {
       client_id,
       stepup_user_id,
       clients (
-        company_id
+        company_id,
+        visible_boards
       )
     `)
     .eq('id', userId)
@@ -402,6 +405,7 @@ async function refreshUserSessionFallback(userId) {
 
   if (data.clients) {
     data.company_id = data.clients.company_id;
+    data.visible_boards = data.clients.visible_boards;
   }
 
   return data;
@@ -458,7 +462,8 @@ export async function insertClient(client) {
       id: client.id,
       name: client.name,
       email: client.email,
-      company_id: client.company_id || null
+      company_id: client.company_id || null,
+      visible_boards: client.visible_boards || ['validate']
     }])
     .select();
 
@@ -585,7 +590,8 @@ export async function updateClient(clientId, clientData, loginData = {}) {
     .update({
       name: clientData.name,
       email: clientData.email,
-      company_id: clientData.company_id || null
+      company_id: clientData.company_id || null,
+      visible_boards: clientData.visible_boards || ['validate']
     })
     .eq('id', clientId)
     .select();

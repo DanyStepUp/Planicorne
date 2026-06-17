@@ -60,6 +60,7 @@ export default function AdminPanel({
   const [clientEmail, setClientEmail] = useState('');
   const [clientPassword, setClientPassword] = useState('');
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
+  const [clientVisibleBoards, setClientVisibleBoards] = useState(['validate']);
 
   // Form states - Step Up User
   const [stepupName, setStepupName] = useState('');
@@ -105,6 +106,7 @@ export default function AdminPanel({
     setClientEmail('');
     setClientPassword('');
     setSelectedCompanyId('');
+    setClientVisibleBoards(['validate']);
 
     // Reset stepup form
     setStepupName('');
@@ -162,6 +164,7 @@ export default function AdminPanel({
     setClientName(client.name);
     setClientEmail(client.email);
     setSelectedCompanyId(client.company_id || '');
+    setClientVisibleBoards(client.visible_boards || ['validate']);
     setActiveFormTab('client');
   };
 
@@ -267,7 +270,8 @@ export default function AdminPanel({
         await updateClient(editingClient.id, {
           name: clientName.trim(),
           email: clientEmail.trim(),
-          company_id: selectedCompanyId
+          company_id: selectedCompanyId,
+          visible_boards: clientVisibleBoards
         }, {
           password: clientPassword.trim() || undefined
         });
@@ -283,7 +287,8 @@ export default function AdminPanel({
           id: clientId,
           name: clientName.trim(),
           email: clientEmail.trim(),
-          company_id: selectedCompanyId
+          company_id: selectedCompanyId,
+          visible_boards: clientVisibleBoards
         });
 
         // 2. Create login account
@@ -303,6 +308,7 @@ export default function AdminPanel({
       setClientEmail('');
       setClientPassword('');
       setSelectedCompanyId('');
+      setClientVisibleBoards(['validate']);
 
       if (onRefreshData) await onRefreshData();
     } catch (err) {
@@ -705,6 +711,47 @@ export default function AdminPanel({
                   />
                 </div>
 
+                <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                  <label>Tableaux visibles pour ce client</label>
+                  <div className="admin-checkbox-list" style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.45rem',
+                    border: '1px solid var(--surface-border)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '0.6rem 0.8rem',
+                    background: 'rgba(255, 255, 255, 0.02)'
+                  }}>
+                    {[
+                      { id: 'draft', label: '💡 Idées / Brouillons' },
+                      { id: 'validate', label: '👀 À valider' },
+                      { id: 'ready', label: '🚀 Prêt à publier' },
+                      { id: 'published', label: '✅ Publié' }
+                    ].map(board => {
+                      const isChecked = clientVisibleBoards.includes(board.id);
+                      return (
+                        <label key={board.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-main)' }}>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setClientVisibleBoards(prev => [...prev, board.id]);
+                              } else {
+                                setClientVisibleBoards(prev => prev.filter(id => id !== board.id));
+                              }
+                            }}
+                          />
+                          <span>{board.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <span className="form-hint" style={{ fontSize: '0.725rem', color: 'var(--text-muted)', display: 'block', marginTop: '0.25rem' }}>
+                    Cochez les colonnes du tableau Kanban que ce client sera autorisé à voir et à gérer.
+                  </span>
+                </div>
+
                 <div style={{ display: 'flex', gap: '0.75rem' }}>
                   <button type="submit" className="btn btn-primary-admin" style={{ flex: 1 }} disabled={loading || !selectedCompanyId}>
                     {editingClient ? <Save size={18} /> : <Plus size={18} />}
@@ -951,6 +998,14 @@ export default function AdminPanel({
                       <tr key={client.id}>
                         <td className="company-name-cell">
                           <strong>{client.name}</strong>
+                          {client.visible_boards && client.visible_boards.length > 0 && (
+                            <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', marginTop: '0.3rem' }}>
+                              {client.visible_boards.includes('draft') && <span style={{ fontSize: '0.675rem', background: 'rgba(99, 102, 241, 0.12)', color: '#818cf8', padding: '0.1rem 0.35rem', borderRadius: '3px', fontWeight: 600 }}>💡 Idées</span>}
+                              {client.visible_boards.includes('validate') && <span style={{ fontSize: '0.675rem', background: 'rgba(245, 158, 11, 0.12)', color: '#fbbf24', padding: '0.1rem 0.35rem', borderRadius: '3px', fontWeight: 600 }}>👀 À valider</span>}
+                              {client.visible_boards.includes('ready') && <span style={{ fontSize: '0.675rem', background: 'rgba(16, 185, 129, 0.12)', color: '#34d399', padding: '0.1rem 0.35rem', borderRadius: '3px', fontWeight: 600 }}>🚀 Prêt</span>}
+                              {client.visible_boards.includes('published') && <span style={{ fontSize: '0.675rem', background: 'rgba(25, 140, 204, 0.12)', color: '#60a5fa', padding: '0.1rem 0.35rem', borderRadius: '3px', fontWeight: 600 }}>✅ Publié</span>}
+                            </div>
+                          )}
                         </td>
                         <td style={{ color: 'var(--text-muted)' }}>{client.email}</td>
                         <td>

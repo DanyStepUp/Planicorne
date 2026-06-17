@@ -11,10 +11,15 @@
     {
       "src": "/Icone.png",
       "type": "image/png",
+      "sizes": "124x124"
+    },
+    {
+      "src": "/pwa-192.png",
+      "type": "image/png",
       "sizes": "192x192"
     },
     {
-      "src": "/Icone.png",
+      "src": "/pwa-512.png",
       "type": "image/png",
       "sizes": "512x512"
     }

@@ -13,8 +13,45 @@
 const CACHE_NAME = 'gdrive-media-cache';
 const DEFAULT_EXPIRATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
-// Keep track of active object URLs to revoke them when no longer needed
+// Keep track of active object URLs and their reference counts to support request collapsing without memory leaks
 const activeObjectUrls = new Map();
+const objectUrlRefs = new Map();
+
+// Collapse concurrent duplicate network requests for the same file
+const ongoingResolves = new Map();
+
+// Clean up fallback markers from Cache Storage and localStorage on startup to allow retrying updated files
+if (typeof caches !== 'undefined') {
+  caches.open(CACHE_NAME).then(async (cache) => {
+    try {
+      const keys = await cache.keys();
+      for (const request of keys) {
+        const response = await cache.match(request);
+        if (response && response.headers.get('X-Cache-Fallback') === 'true') {
+          await cache.delete(request);
+          console.debug(`[MediaCache] Cleared fallback marker from cache: ${request.url}`);
+        }
+      }
+    } catch (e) {
+      console.warn("[MediaCache] Error cleaning up startup fallback markers:", e);
+    }
+  }).catch(() => {});
+}
+
+if (typeof localStorage !== 'undefined') {
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('gdrive_meta_')) {
+        const metaStr = localStorage.getItem(key);
+        if (metaStr && metaStr.includes('"fallback":true')) {
+          localStorage.removeItem(key);
+          console.debug(`[MediaCache] Cleared fallback marker from localStorage: ${key}`);
+        }
+      }
+    }
+  } catch (e) {}
+}
 
 /**
  * Detects if the app is running in a native mobile environment (Capacitor/Cordova)
@@ -80,64 +117,127 @@ function getCacheKey(driveId) {
 export async function getMediaUrl(driveId, token, options = {}) {
   if (!driveId) return '';
 
-  const useThumbnail = options.useThumbnail !== false;
-  const expirationMs = options.expirationMs || DEFAULT_EXPIRATION_MS;
-  const mimeType = options.mimeType || '';
+  const cacheKey = `${driveId}_${token || 'public'}_${options.useThumbnail !== false}`;
 
-  // 1. If it's a video, do not cache as a blob (could be too large). Return Google Drive iframe preview link.
-  if (mimeType.startsWith('video/') || options.isVideo) {
-    return `https://drive.google.com/file/d/${driveId}/preview`;
+  if (ongoingResolves.has(cacheKey)) {
+    console.debug(`[MediaCache] Request collapsed for ${driveId}`);
+    return ongoingResolves.get(cacheKey);
   }
 
-  // 2. Check local cache first
-  try {
-    const cachedItem = await getFromCache(driveId);
-    if (cachedItem) {
-      const { blob, expires, isFallback } = cachedItem;
-      const isExpired = Date.now() > expires;
+  const resolvePromise = (async () => {
+    const useThumbnail = options.useThumbnail !== false;
+    const expirationMs = options.expirationMs || DEFAULT_EXPIRATION_MS;
+    const mimeType = options.mimeType || '';
 
-      if (!isExpired) {
-        if (isFallback) {
-          return `https://lh3.googleusercontent.com/d/${driveId}`;
+    // 1. If it's a video, do not cache as a blob (could be too large). Return Google Drive iframe preview link.
+    if (mimeType.startsWith('video/') || options.isVideo) {
+      return `https://drive.google.com/file/d/${driveId}/preview`;
+    }
+
+    // 2. Check local cache first
+    try {
+      const cachedItem = await getFromCache(driveId);
+      if (cachedItem) {
+        const { blob, expires, isFallback } = cachedItem;
+        const isExpired = Date.now() > expires;
+
+        if (!isExpired) {
+          if (isFallback) {
+            return `https://lh3.googleusercontent.com/d/${driveId}=s1000`;
+          } else {
+            // Return valid cached content
+            const objectUrl = URL.createObjectURL(blob);
+            trackObjectUrl(driveId, objectUrl);
+            return objectUrl;
+          }
+        } else {
+          console.log(`Cache entry for drive file ${driveId} has expired. Re-fetching...`);
+          // Remove expired entry
+          await removeFromCache(driveId);
         }
-        // Return valid cached content
+      }
+    } catch (err) {
+      console.warn("Failed to check media cache, falling back to direct network fetch:", err);
+    }
+
+    // Helper to fetch the public fallback link as a blob and cache it without credentials
+    // This bypasses Google's 403 cookie bugs for public files in logged-in browsers
+    const fetchPublicFallbackAsBlob = async () => {
+      // Try lh3.googleusercontent.com first (scaled thumbnail for speed/bandwidth)
+      const lh3Url = `https://lh3.googleusercontent.com/d/${driveId}=s1000`;
+      console.log(`[MediaCache] Attempting public fallback blob fetch (lh3) for ${driveId}...`);
+      try {
+        const response = await fetch(lh3Url, { credentials: 'omit' });
+        if (response.ok) {
+          const blob = await response.blob();
+          const fetchedMime = response.headers.get('Content-Type') || 'image/png';
+          await saveToCache(driveId, blob, expirationMs, fetchedMime);
+          const objectUrl = URL.createObjectURL(blob);
+          trackObjectUrl(driveId, objectUrl);
+          return objectUrl;
+        }
+        throw new Error(`lh3 fetch failed with status ${response.status}`);
+      } catch (lh3Err) {
+        console.debug(`[MediaCache] Public fetch (lh3) failed for ${driveId}: ${lh3Err.message}. Trying direct drive.usercontent...`);
+        
+        // Try drive.usercontent.google.com as a secondary public fallback (bypasses lh3 rate limits)
+        const directUrl = `https://drive.usercontent.google.com/download?id=${driveId}&export=view`;
+        const response = await fetch(directUrl, { credentials: 'omit' });
+        if (!response.ok) {
+          throw new Error(`Direct drive.usercontent fetch failed with status ${response.status}`);
+        }
+        const blob = await response.blob();
+        const fetchedMime = response.headers.get('Content-Type') || 'image/png';
+        await saveToCache(driveId, blob, expirationMs, fetchedMime);
         const objectUrl = URL.createObjectURL(blob);
         trackObjectUrl(driveId, objectUrl);
         return objectUrl;
-      } else {
-        console.log(`Cache entry for drive file ${driveId} has expired. Re-fetching...`);
-        // Remove expired entry
-        await removeFromCache(driveId);
+      }
+    };
+
+    // 3. Fallback or missing cache: Fetch from network and save to cache
+    if (!token) {
+      try {
+        return await fetchPublicFallbackAsBlob();
+      } catch (publicErr) {
+        console.debug(`[MediaCache] Public fallback fetch failed for ${driveId}:`, publicErr.message);
+        // Save fallback marker with short 2-minute duration to check again soon if shared settings change
+        saveFallbackMarkerToCache(driveId, 120000).catch(() => {});
+        return `https://lh3.googleusercontent.com/d/${driveId}=s1000`;
       }
     }
-  } catch (err) {
-    console.warn("Failed to check media cache, falling back to direct network fetch:", err);
-  }
 
-  // 3. Fallback or missing cache: Fetch from network and save to cache
-  if (!token) {
-    // No authorization token, return public link fallback (un-cached)
-    return `https://lh3.googleusercontent.com/d/${driveId}`;
-  }
+    try {
+      const { blob, fetchedMime } = await fetchFromGoogleDrive(driveId, token, useThumbnail);
+      
+      // Save to cache asynchronously
+      saveToCache(driveId, blob, expirationMs, fetchedMime).catch(err => 
+        console.debug("[MediaCache] Failed to write to media cache:", err.message)
+      );
+
+      const objectUrl = URL.createObjectURL(blob);
+      trackObjectUrl(driveId, objectUrl);
+      return objectUrl;
+    } catch (err) {
+      console.debug(`[MediaCache] Secure fetch failed for ${driveId} (${err.message}). Trying public fallback...`);
+      try {
+        return await fetchPublicFallbackAsBlob();
+      } catch (publicErr) {
+        // Both failed, save fallback marker with 2-minute duration
+        saveFallbackMarkerToCache(driveId, 120000).catch(() => {});
+        console.debug(`[MediaCache] Both secure and public fetch failed. Using raw public link fallback.`);
+        return `https://lh3.googleusercontent.com/d/${driveId}=s1000`;
+      }
+    }
+  })();
+
+  ongoingResolves.set(cacheKey, resolvePromise);
 
   try {
-    const { blob, fetchedMime } = await fetchFromGoogleDrive(driveId, token, useThumbnail);
-    
-    // Save to cache asynchronously
-    saveToCache(driveId, blob, expirationMs, fetchedMime).catch(err => 
-      console.info("[MediaCache] Failed to write to media cache:", err.message)
-    );
-
-    const objectUrl = URL.createObjectURL(blob);
-    trackObjectUrl(driveId, objectUrl);
-    return objectUrl;
-  } catch (err) {
-    // Save a fallback marker in the cache so we don't try to fetch again for 7 days
-    saveFallbackMarkerToCache(driveId, expirationMs).catch(() => {});
-
-    // Silently catch and return public URL fallback
-    console.info(`[MediaCache] Using public thumbnail fallback for ${driveId} (${err.message})`);
-    return `https://lh3.googleusercontent.com/d/${driveId}`;
+    const result = await resolvePromise;
+    return result;
+  } finally {
+    ongoingResolves.delete(cacheKey);
   }
 }
 
@@ -324,29 +424,42 @@ async function removeFromCache(driveId) {
 }
 
 /**
- * Tracks generated Object URLs to avoid memory leaks
+ * Tracks generated Object URLs and increments their reference count
  */
 function trackObjectUrl(driveId, objectUrl) {
-  // If there's an existing object URL for this drive ID, revoke it first
+  const count = objectUrlRefs.get(driveId) || 0;
+  objectUrlRefs.set(driveId, count + 1);
+
   if (activeObjectUrls.has(driveId)) {
-    try {
-      URL.revokeObjectURL(activeObjectUrls.get(driveId));
-    } catch (e) {}
+    const activeUrl = activeObjectUrls.get(driveId);
+    if (activeUrl !== objectUrl) {
+      try {
+        URL.revokeObjectURL(activeUrl);
+      } catch (e) {}
+      objectUrlRefs.set(driveId, 1);
+    }
   }
   activeObjectUrls.set(driveId, objectUrl);
 }
 
 /**
- * Revokes a specific Object URL to free browser memory
- * Should be called when a component displaying the image unmounts.
+ * Decrements the reference count of an Object URL and revokes it only when no longer used
  */
 export function revokeMediaUrl(driveId) {
-  if (driveId && activeObjectUrls.has(driveId)) {
-    const url = activeObjectUrls.get(driveId);
-    try {
-      URL.revokeObjectURL(url);
-    } catch (e) {}
-    activeObjectUrls.delete(driveId);
+  if (!driveId) return;
+
+  const count = objectUrlRefs.get(driveId) || 0;
+  if (count <= 1) {
+    if (activeObjectUrls.has(driveId)) {
+      const url = activeObjectUrls.get(driveId);
+      try {
+        URL.revokeObjectURL(url);
+      } catch (e) {}
+      activeObjectUrls.delete(driveId);
+    }
+    objectUrlRefs.delete(driveId);
+  } else {
+    objectUrlRefs.set(driveId, count - 1);
   }
 }
 
@@ -361,6 +474,8 @@ export async function clearAllMediaCache() {
     } catch (e) {}
   }
   activeObjectUrls.clear();
+  objectUrlRefs.clear();
+  ongoingResolves.clear();
 
   // Clear Capacitor Filesystem Cache
   const fs = getCapacitorFilesystem();
