@@ -9,6 +9,7 @@ import DriveSettings from './components/DriveSettings';
 import CommentsSection from './components/CommentsSection';
 import Login from './components/Login';
 import AdminPanel from './components/AdminPanel';
+import PerformancePanel from './components/PerformancePanel';
 import { 
   verifyPermission, 
   readCardsFromDirectory, 
@@ -1160,6 +1161,11 @@ function App() {
             onRefreshData={loadProfiles}
             currentUser={currentUser}
           />
+        )}
+
+        {/* ONGLET 2.9 : PERFORMANCE (STATISTIQUES & RENTABILITE DES TEMPS) */}
+        {activeTab === 'performance' && ['admin', 'manager', 'super_manager'].includes(currentUser?.role?.trim().toLowerCase()) && (
+          <PerformancePanel currentUser={currentUser} />
         )}
 
         {/* ONGLET 3 : CONFIGURATION GOOGLE DRIVE */}

@@ -1,5 +1,5 @@
 
-import { Moon, Sun, Columns, Database, LogOut, User, Calendar, Users, Lock, Download } from 'lucide-react';
+import { Moon, Sun, Columns, Database, LogOut, User, Calendar, Users, Lock, Download, BarChart3 } from 'lucide-react';
 import './Header.css';
 
 export default function Header({
@@ -131,6 +131,16 @@ export default function Header({
                 >
                   <Users size={18} />
                   <span>Administration</span>
+                </button>
+              )}
+
+              {['admin', 'manager', 'super_manager'].includes(currentUser.role?.trim().toLowerCase()) && (
+                <button
+                  className={`nav-btn ${activeTab === 'performance' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('performance')}
+                >
+                  <BarChart3 size={18} />
+                  <span>Performance</span>
                 </button>
               )}
 
